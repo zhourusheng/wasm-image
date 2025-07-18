@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    /* ... other color variables */
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    /* ... other dark mode color variables */
+  }
+  
+  body {
+    @apply bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200;
+  }
+}
+
+@layer components {
+  .icon-btn {
+    @apply p-2 rounded-md transition-colors;
+    @apply text-gray-600 dark:text-gray-400;
+    @apply hover:bg-gray-200 dark:hover:bg-gray-700;
+    @apply hover:text-gray-900 dark:hover:text-gray-100;
+  }
+  .icon-btn.active {
+    @apply bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400;
+  }
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #88888855;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #55555588;
+}
+
+/* Custom range input styles */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: #ddd;
+  outline: none;
+  border-radius: 2px;
+}
+
+.dark input[type="range"] {
+  background: #444;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 50%;
+  border: 1px solid #ccc;
+}
+
+.dark input[type="range"]::-webkit-slider-thumb {
+  background: #ccc;
+  border: 1px solid #888;
+} 
