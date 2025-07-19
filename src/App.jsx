@@ -1,18 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay
+  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X
 } from 'lucide-react';
 import { loadImageFromFile, drawImageToCanvas, exportImage } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
-// 新增：worker实例（ES module方式）
-let imageWorker = null;
-if (typeof window !== 'undefined') {
-  imageWorker = new Worker('/src/workers/imageWorker.js', { type: 'module' });
-}
+
 
 function App() {
   const [image, setImage] = useState(null);
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [isCropMode, setIsCropMode] = useState(false);
+  const [cropArea, setCropArea] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const historyManager = useRef(new HistoryManager()).current;
@@ -22,43 +22,6 @@ function App() {
   useEffect(() => {
     // 创建worker
     imageWorker.current = new Worker(new URL('./workers/imageWorker.js', import.meta.url), { type: 'module' });
-    
-    // OpenCV 加载完成后通知 Worker
-    const initOpenCVInWorker = () => {
-      // 确保 cv 是全局可用的
-      if (window.cv && window.cv.Mat) {
-        // 通知 worker OpenCV 已加载
-        imageWorker.current.postMessage({
-          action: 'init-opencv',
-          cv: window.cv
-        });
-      } else {
-        // 如果 OpenCV 尚未加载，等待其加载
-        window.addEventListener('opencv-loaded', () => {
-          imageWorker.current.postMessage({
-            action: 'init-opencv',
-            cv: window.cv
-          });
-        }, { once: true });
-      }
-    };
-
-    // 检查 OpenCV 是否已加载
-    if (window.cv && window.cv.Mat) {
-      initOpenCVInWorker();
-    } else {
-      // 监听 OpenCV 加载完成事件
-      window.addEventListener('cv-loaded', initOpenCVInWorker, { once: true });
-      
-      // 如果没有找到全局 cv 对象，创建一个事件监听器
-      const script = document.querySelector('script[src$="/wasm/opencv.js"]');
-      if (script) {
-        script.onload = () => {
-          const event = new Event('cv-loaded');
-          window.dispatchEvent(event);
-        };
-      }
-    }
     
     return () => imageWorker.current && imageWorker.current.terminate();
   }, []);
@@ -129,6 +92,93 @@ function App() {
     });
   }, [historyManager]);
 
+  // 裁剪相关函数
+  const handleCropModeToggle = () => {
+    if (!image) {
+      alert('请先上传一张图片');
+      return;
+    }
+    setIsCropMode(!isCropMode);
+    if (isCropMode) {
+      setCropArea(null);
+    }
+  };
+
+  const handleCropConfirm = async () => {
+    if (!cropArea) {
+      alert('请先选择裁剪区域');
+      return;
+    }
+    
+    // 检查裁剪区域是否太小
+    if (cropArea.width < 10 || cropArea.height < 10) {
+      alert('裁剪区域太小，请选择更大的区域');
+      return;
+    }
+    
+    try {
+      await processEdit('crop', cropArea);
+      setIsCropMode(false);
+      setCropArea(null);
+    } catch (error) {
+      console.error('裁剪失败:', error);
+    }
+  };
+
+  const handleCropCancel = () => {
+    setIsCropMode(false);
+    setCropArea(null);
+  };
+
+  const getCanvasCoordinates = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    };
+  };
+
+  const handleCanvasMouseDown = (e) => {
+    if (!isCropMode) return;
+    
+    const coords = getCanvasCoordinates(e);
+    setIsDragging(true);
+    setDragStart(coords);
+    setCropArea({
+      x: coords.x,
+      y: coords.y,
+      width: 0,
+      height: 0
+    });
+  };
+
+  const handleCanvasMouseMove = (e) => {
+    if (!isCropMode || !isDragging) return;
+    
+    const coords = getCanvasCoordinates(e);
+    const canvas = canvasRef.current;
+    
+    // 确保坐标不超出画布边界
+    const clampedX = Math.max(0, Math.min(coords.x, canvas.width));
+    const clampedY = Math.max(0, Math.min(coords.y, canvas.height));
+    
+    // 计算裁剪区域，支持从任意方向拖拽
+    const width = clampedX - dragStart.x;
+    const height = clampedY - dragStart.y;
+    
+    setCropArea(prev => ({
+      x: width >= 0 ? dragStart.x : clampedX,
+      y: height >= 0 ? dragStart.y : clampedY,
+      width: Math.abs(width),
+      height: Math.abs(height)
+    }));
+  };
+
+  const handleCanvasMouseUp = () => {
+    if (!isCropMode) return;
+    setIsDragging(false);
+  };
+
   // 旋转
   const handleRotateCw = () => processEdit('rotate', { angle: 90 });
   const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
@@ -139,7 +189,7 @@ function App() {
   const handleResize = () => {
     if (!canvasRef.current) return;
     const { width, height } = canvasRef.current;
-    processEdit('resize', { newW: Math.round(width * 1.2), newH: Math.round(height * 1.2) });
+    processEdit('resize', { width: Math.round(width * 1.2), height: Math.round(height * 1.2) });
   };
   // 亮度、对比度、饱和度调整
   const handleBrightness = (delta) => processEdit('brightness', { delta });
@@ -161,6 +211,35 @@ function App() {
       forceUpdate();
     }
   };
+
+  // 绘制裁剪框
+  useEffect(() => {
+    if (!canvasRef.current || !isCropMode || !cropArea) return;
+    
+    const ctx = canvasRef.current.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+    
+    // 重新绘制图像
+    ctx.putImageData(imageData, 0, 0);
+    
+    // 绘制半透明遮罩
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    
+    // 清除裁剪区域内的遮罩
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+    ctx.globalCompositeOperation = 'source-over';
+    
+    // 绘制裁剪框边框
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+    
+    // 重置虚线样式
+    ctx.setLineDash([]);
+  }, [cropArea, isCropMode]);
   
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
@@ -193,7 +272,10 @@ function App() {
           <button className="icon-btn active">
             <SlidersHorizontal size={24} />
           </button>
-          <button className="icon-btn">
+          <button 
+            className={`icon-btn ${isCropMode ? 'active' : ''}`}
+            onClick={handleCropModeToggle}
+          >
             <Crop size={24} />
           </button>
           <div className="pt-2 border-t border-gray-200 dark:border-gray-700 w-full flex flex-col items-center space-y-2">
@@ -230,11 +312,29 @@ function App() {
                 <Trash2 size={20} />
               </button>
             </div>
+            {isCropMode && (
+              <div className="flex items-center space-x-2">
+                <button className="icon-btn text-green-500" onClick={handleCropConfirm}>
+                  <Check size={20} />
+                </button>
+                <button className="icon-btn text-red-500" onClick={handleCropCancel}>
+                  <X size={20} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Canvas Area */}
-          <div className="flex-1 flex items-center justify-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto">
-            <canvas id="canvas" ref={canvasRef} className={`max-w-full max-h-full bg-white dark:bg-gray-700 shadow-lg rounded-md ${!image ? 'hidden' : ''}`}></canvas>
+          <div className="flex-1 flex items-center justify-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative">
+            <canvas 
+              id="canvas" 
+              ref={canvasRef} 
+              className={`max-w-full max-h-full bg-white dark:bg-gray-700 shadow-lg rounded-md ${!image ? 'hidden' : ''} ${isCropMode ? 'cursor-crosshair' : ''}`}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
+              onMouseLeave={handleCanvasMouseUp}
+            ></canvas>
             {!image && (
               <div className="absolute flex items-center justify-center inset-0">
                 <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
@@ -244,6 +344,11 @@ function App() {
                     Upload Image
                   </button>
                 </div>
+              </div>
+            )}
+            {isCropMode && image && (
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-md text-sm">
+                拖拽鼠标选择裁剪区域，然后点击确认按钮
               </div>
             )}
           </div>
