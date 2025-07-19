@@ -17,7 +17,7 @@ export default class HistoryManager {
    * 添加状态到历史记录
    * @param {ImageData} imageData - 图像数据
    */
-  addState(imageData) {
+  add(imageData) {
     // 创建图像数据的深拷贝
     const clonedData = new ImageData(
       new Uint8ClampedArray(imageData.data),

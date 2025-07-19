@@ -1,71 +1,113 @@
-// imageWorker.js
-import { initWasm, processImage } from '../wasm/wasmBridge.js';
+// src/workers/imageWorker.js
 
-let opencvReady = false;
+// This is the correct way to load and initialize emscripten modules in a worker.
+// 1. Define the Module object
+// 2. Pre-fetch the wasm binary
+// 3. Import the javascript glue code
+self.Module = {
+    // Don't run the main loop
+    noInitialRun: true,
+    // When the runtime is initialized, post a message to the main thread
+    onRuntimeInitialized: () => {
+        // self.cv is the global object that opencv.js creates.
+        postMessage({ type: 'opencv-loaded' });
+    },
+    // We will fetch the wasm binary ourselves and place it here
+    wasmBinary: null,
+};
 
-async function ensureOpenCV() {
-  if (!opencvReady) {
+// Fetch the wasm binary and then import the script
+(async () => {
     try {
-      console.log('Worker: 开始加载 OpenCV...');
-      
-      // 使用 importScripts 加载 OpenCV
-      importScripts('/wasm/opencv.js');
-      console.log('Worker: OpenCV 脚本加载完成');
-      
-      // 等待 OpenCV 初始化
-      if (typeof self.cv !== 'undefined') {
-        console.log('Worker: cv 对象已存在');
-        if (self.cv.Mat) {
-          console.log('Worker: OpenCV 已初始化');
-          opencvReady = true;
-        } else {
-          console.log('Worker: 等待 OpenCV 运行时初始化...');
-          // 等待运行时初始化
-          await new Promise((resolve) => {
-            self.cv['onRuntimeInitialized'] = () => {
-              console.log('Worker: OpenCV 运行时初始化完成');
-              opencvReady = true;
-              resolve();
-            };
-          });
+        const response = await fetch('/js/opencv.wasm');
+        if (!response.ok) {
+            throw new Error(`Failed to fetch wasm: ${response.status} ${response.statusText}`);
         }
-      } else {
-        console.error('Worker: cv 对象未找到');
-        throw new Error('OpenCV 加载失败');
-      }
-      
-      await initWasm();
-      console.log('Worker: OpenCV WebAssembly 初始化完成');
-    } catch (err) {
-      console.error('Worker: OpenCV WebAssembly 初始化失败:', err);
-      throw new Error('无法初始化图像处理库: ' + err.message);
+        const buffer = await response.arrayBuffer();
+        self.Module.wasmBinary = buffer;
+        self.importScripts('/js/opencv.js');
+    } catch (error) {
+        console.error("Failed to load OpenCV in worker:", error);
+        postMessage({ type: 'error', payload: 'Failed to initialize OpenCV.' });
     }
-  }
-}
+})();
 
-// 处理来自主线程的消息
-self.onmessage = async function(e) {
-  const { imageData, op, params } = e.data;
-  
-  try {
-    console.log(`Worker: 收到操作请求: ${op}`);
-    
-    // 确保 OpenCV 已初始化
-    await ensureOpenCV();
-    
-    console.time(`${op}-operation`);
-    const result = await processImage(imageData, op, params);
-    console.timeEnd(`${op}-operation`);
-    
-    console.log(`Worker: 操作 ${op} 完成`);
-    
-    // 将处理结果发送回主线程，使用 Transferable Objects 提升性能
-    self.postMessage({ result }, [result.data.buffer]);
-  } catch (err) {
-    console.error(`Worker: 处理图像操作 '${op}' 时发生错误:`, err);
-    self.postMessage({ 
-      error: err.message || '处理图像时发生未知错误',
-      operation: op
-    });
-  }
-}; 
+
+self.onmessage = async (e) => {
+    const { type, payload } = e.data;
+
+    if (type === 'image-process') {
+        if (self.cv) {
+            processImage(payload.imageData, payload.action);
+        } else {
+            // This should not happen if the UI waits for 'opencv-loaded'
+            console.error("OpenCV is not ready yet.");
+            postMessage({ type: 'error', payload: 'OpenCV is not ready.' });
+        }
+    }
+};
+
+function processImage(imageData, action) {
+    try {
+        const src = self.cv.matFromImageData(imageData);
+        const dst = new self.cv.Mat();
+        
+        // Some operations require a grayscale image
+        const needsGrayscale = ['canny', 'threshold'];
+        let processSrc = src;
+        if (needsGrayscale.includes(action)) {
+            processSrc = new self.cv.Mat();
+            self.cv.cvtColor(src, processSrc, self.cv.COLOR_RGBA2GRAY, 0);
+        }
+
+        switch (action) {
+            case 'grayscale':
+                self.cv.cvtColor(src, dst, self.cv.COLOR_RGBA2GRAY, 0);
+                break;
+            case 'blur':
+                let ksize = new self.cv.Size(25, 25);
+                self.cv.blur(src, dst, ksize, new self.cv.Point(-1, -1), self.cv.BORDER_DEFAULT);
+                break;
+            case 'canny':
+                self.cv.Canny(processSrc, dst, 50, 100, 3, false);
+                break;
+            case 'threshold':
+                self.cv.threshold(processSrc, dst, 127, 255, self.cv.THRESH_BINARY);
+                break;
+            case 'original':
+            default:
+                // No action or unknown action, just clone the source
+                src.copyTo(dst);
+                break;
+        }
+
+        if (processSrc !== src) {
+            processSrc.delete();
+        }
+
+        let displayMat = dst;
+        // If the output is single-channel (like grayscale, canny), convert it back to RGBA for display
+        if (dst.channels() === 1) {
+            displayMat = new self.cv.Mat();
+            self.cv.cvtColor(dst, displayMat, self.cv.COLOR_GRAY2RGBA);
+        }
+        
+        const newImageData = new ImageData(
+            new Uint8ClampedArray(displayMat.data),
+            displayMat.cols,
+            displayMat.rows
+        );
+        
+        self.postMessage({ type: 'image-processed', payload: { imageData: newImageData } });
+        
+        src.delete();
+        dst.delete();
+        if (displayMat !== dst) {
+            displayMat.delete();
+        }
+
+    } catch (error) {
+        console.error("Error in processImage:", error);
+        self.postMessage({ type: 'error', payload: error.toString() });
+    }
+} 
