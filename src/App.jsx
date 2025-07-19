@@ -1,9 +1,14 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay
 } from 'lucide-react';
 import { loadImageFromFile, drawImageToCanvas, exportImage } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
+// 新增：worker实例（ES module方式）
+let imageWorker = null;
+if (typeof window !== 'undefined') {
+  imageWorker = new Worker('/src/workers/imageWorker.js', { type: 'module' });
+}
 
 function App() {
   const [image, setImage] = useState(null);
@@ -11,6 +16,13 @@ function App() {
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
   const historyManager = useRef(new HistoryManager()).current;
+
+  // 新增：worker实例（ES module方式）
+  const imageWorker = useRef(null);
+  useEffect(() => {
+    imageWorker.current = new Worker(new URL('./workers/imageWorker.js', import.meta.url), { type: 'module' });
+    return () => imageWorker.current && imageWorker.current.terminate();
+  }, []);
 
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files[0];
@@ -57,6 +69,44 @@ function App() {
   const [, setTick] = useState(0);
   const forceUpdate = () => setTick(tick => tick + 1);
 
+  // 新增：处理图像编辑的通用函数
+  const processEdit = useCallback((op, params) => {
+    if (!canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+    return new Promise((resolve, reject) => {
+      imageWorker.current.onmessage = (e) => {
+        if (e.data.error) {
+          alert(e.data.error);
+          reject(e.data.error);
+        } else {
+          updateCanvasWithState(e.data.result);
+          historyManager.addState(e.data.result);
+          forceUpdate();
+          resolve();
+        }
+      };
+      imageWorker.current.postMessage({ imageData, op, params });
+    });
+  }, [historyManager]);
+
+  // 旋转
+  const handleRotateCw = () => processEdit('rotate', { angle: 90 });
+  const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
+  // 翻转
+  const handleFlipH = () => processEdit('flip', { mode: 0 });
+  const handleFlipV = () => processEdit('flip', { mode: 1 });
+  // 缩放（示例：放大1.2倍）
+  const handleResize = () => {
+    if (!canvasRef.current) return;
+    const { width, height } = canvasRef.current;
+    processEdit('resize', { newW: Math.round(width * 1.2), newH: Math.round(height * 1.2) });
+  };
+  // 亮度、对比度、饱和度调整
+  const handleBrightness = (delta) => processEdit('brightness', { delta });
+  const handleContrast = (factor) => processEdit('contrast', { factor });
+  const handleSaturation = (factor) => processEdit('saturation', { factor });
+  
   const handleUndo = () => {
     const prevState = historyManager.undo();
     if (prevState) {
@@ -108,17 +158,20 @@ function App() {
             <Crop size={24} />
           </button>
           <div className="pt-2 border-t border-gray-200 dark:border-gray-700 w-full flex flex-col items-center space-y-2">
-             <button className="icon-btn">
+             <button className="icon-btn" onClick={handleRotateCw}>
               <RotateCw size={24} />
             </button>
-            <button className="icon-btn">
+            <button className="icon-btn" onClick={handleRotateCcw}>
               <RotateCcw size={24} />
             </button>
-            <button className="icon-btn">
+            <button className="icon-btn" onClick={handleFlipH}>
               <FlipHorizontal size={24} />
             </button>
-             <button className="icon-btn">
+             <button className="icon-btn" onClick={handleFlipV}>
               <FlipVertical size={24} />
+            </button>
+            <button className="icon-btn" onClick={handleResize}>
+              <ZoomIn size={24} />
             </button>
           </div>
         </aside>
@@ -182,15 +235,15 @@ function App() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Brightness</label>
-              <input type="range" className="w-full" />
+              <input type="range" className="w-full" min="-100" max="100" defaultValue="0" onChange={e => handleBrightness(Number(e.target.value))} />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Contrast</label>
-              <input type="range" className="w-full" />
+              <input type="range" className="w-full" min="0.1" max="3" step="0.01" defaultValue="1" onChange={e => handleContrast(Number(e.target.value))} />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Saturation</label>
-              <input type="range" className="w-full" />
+              <input type="range" className="w-full" min="0" max="3" step="0.01" defaultValue="1" onChange={e => handleSaturation(Number(e.target.value))} />
             </div>
              <div>
               <label className="block text-sm font-medium mb-1">Blur</label>
