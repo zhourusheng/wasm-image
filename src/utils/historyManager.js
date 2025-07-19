@@ -92,4 +92,13 @@ export default class HistoryManager {
     this.undoStack = [];
     this.redoStack = [];
   }
+  
+  /**
+   * 获取当前状态
+   * @returns {ImageData|null}
+   */
+  getCurrentState() {
+      if (this.undoStack.length === 0) return null;
+      return this.undoStack[this.undoStack.length - 1];
+  }
 } 

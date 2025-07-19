@@ -38,7 +38,7 @@ self.onmessage = async (e) => {
 
     if (type === 'image-process') {
         if (self.cv) {
-            processImage(payload.imageData, payload.action);
+            processImage(payload.imageData, payload.action, payload.params);
         } else {
             // This should not happen if the UI waits for 'opencv-loaded'
             console.error("OpenCV is not ready yet.");
@@ -47,10 +47,10 @@ self.onmessage = async (e) => {
     }
 };
 
-function processImage(imageData, action) {
+function processImage(imageData, action, params) {
     try {
         const src = self.cv.matFromImageData(imageData);
-        const dst = new self.cv.Mat();
+        let dst = new self.cv.Mat();
         
         // Some operations require a grayscale image
         const needsGrayscale = ['canny', 'threshold'];
@@ -73,6 +73,20 @@ function processImage(imageData, action) {
                 break;
             case 'threshold':
                 self.cv.threshold(processSrc, dst, 127, 255, self.cv.THRESH_BINARY);
+                break;
+            case 'crop':
+                const rect = new self.cv.Rect(params.x, params.y, params.width, params.height);
+                dst = src.roi(rect);
+                break;
+            case 'rotate':
+                let dsize = new self.cv.Size(src.rows, src.cols);
+                let center = new self.cv.Point(src.cols / 2, src.rows / 2);
+                let M = self.cv.getRotationMatrix2D(center, params.angle, 1);
+                self.cv.warpAffine(src, dst, M, dsize, self.cv.INTER_LINEAR, self.cv.BORDER_CONSTANT, new self.cv.Scalar());
+                M.delete();
+                break;
+            case 'flip':
+                self.cv.flip(src, dst, params.mode);
                 break;
             case 'original':
             default:
@@ -101,7 +115,10 @@ function processImage(imageData, action) {
         self.postMessage({ type: 'image-processed', payload: { imageData: newImageData } });
         
         src.delete();
-        dst.delete();
+        // If roi was used, dst is a reference not a new Mat, so don't delete it if it's pointing to src's data
+        if (action !== 'crop') {
+            dst.delete();
+        }
         if (displayMat !== dst) {
             displayMat.delete();
         }
