@@ -10,6 +10,6 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <!-- OpenCV.js -->
-    <script src="/wasm/opencv.js"></script>
+    <script async src="/wasm/opencv.js" onload="window.dispatchEvent(new Event('cv-loaded'))"></script>
   </body>
 </html> 

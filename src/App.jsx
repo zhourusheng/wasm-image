@@ -20,7 +20,46 @@ function App() {
   // 新增：worker实例（ES module方式）
   const imageWorker = useRef(null);
   useEffect(() => {
+    // 创建worker
     imageWorker.current = new Worker(new URL('./workers/imageWorker.js', import.meta.url), { type: 'module' });
+    
+    // OpenCV 加载完成后通知 Worker
+    const initOpenCVInWorker = () => {
+      // 确保 cv 是全局可用的
+      if (window.cv && window.cv.Mat) {
+        // 通知 worker OpenCV 已加载
+        imageWorker.current.postMessage({
+          action: 'init-opencv',
+          cv: window.cv
+        });
+      } else {
+        // 如果 OpenCV 尚未加载，等待其加载
+        window.addEventListener('opencv-loaded', () => {
+          imageWorker.current.postMessage({
+            action: 'init-opencv',
+            cv: window.cv
+          });
+        }, { once: true });
+      }
+    };
+
+    // 检查 OpenCV 是否已加载
+    if (window.cv && window.cv.Mat) {
+      initOpenCVInWorker();
+    } else {
+      // 监听 OpenCV 加载完成事件
+      window.addEventListener('cv-loaded', initOpenCVInWorker, { once: true });
+      
+      // 如果没有找到全局 cv 对象，创建一个事件监听器
+      const script = document.querySelector('script[src$="/wasm/opencv.js"]');
+      if (script) {
+        script.onload = () => {
+          const event = new Event('cv-loaded');
+          window.dispatchEvent(event);
+        };
+      }
+    }
+    
     return () => imageWorker.current && imageWorker.current.terminate();
   }, []);
 
