@@ -129,19 +129,72 @@ self.wasmProcessImage = async function(imageData, op, params, ctx, timer) {
         break;
       }
       case 'sepia': {
+        // 优化方案：手动计算通道，避免通用的、较慢的 cv.transform
         dst = new self.cv.Mat();
-        // 复古效果的转换矩阵
-        const M = self.cv.matFromArray(3, 4, self.cv.CV_32F, [
-          0.272, 0.534, 0.131, 0,
-          0.349, 0.686, 0.168, 0,
-          0.393, 0.769, 0.189, 0,
-        ]);
-        self.cv.transform(src, dst, M);
-        M.delete();
-        // OpenCV的transform可能会改变通道数，确保输出是4通道
-        if (dst.channels() === 3) {
-            self.cv.cvtColor(dst, dst, self.cv.COLOR_RGB2RGBA);
-        }
+        const channels = new self.cv.MatVector();
+        self.cv.split(src, channels);
+
+        const r = channels.get(0);
+        const g = channels.get(1);
+        const b = channels.get(2);
+
+        // Sepia 公示:
+        // newR = R * 0.393 + G * 0.769 + B * 0.189
+        // newG = R * 0.349 + G * 0.686 + B * 0.168
+        // newB = R * 0.272 + G * 0.534 + B * 0.131
+        
+        // 为了在 OpenCV 中高效计算，我们创建临时 Mat
+        const newR = new self.cv.Mat();
+        const newG = new self.cv.Mat();
+        const newB = new self.cv.Mat();
+        
+        // 计算 newR
+        const r_r = new self.cv.Mat();
+        const r_g = new self.cv.Mat();
+        const r_b = new self.cv.Mat();
+        self.cv.multiply(r, new self.cv.Mat(r.rows, r.cols, r.type(), new self.cv.Scalar(0.393)), r_r);
+        self.cv.multiply(g, new self.cv.Mat(g.rows, g.cols, g.type(), new self.cv.Scalar(0.769)), r_g);
+        self.cv.multiply(b, new self.cv.Mat(b.rows, b.cols, b.type(), new self.cv.Scalar(0.189)), r_b);
+        self.cv.add(r_r, r_g, newR);
+        self.cv.add(newR, r_b, newR);
+
+        // 计算 newG
+        const g_r = new self.cv.Mat();
+        const g_g = new self.cv.Mat();
+        const g_b = new self.cv.Mat();
+        self.cv.multiply(r, new self.cv.Mat(r.rows, r.cols, r.type(), new self.cv.Scalar(0.349)), g_r);
+        self.cv.multiply(g, new self.cv.Mat(g.rows, g.cols, g.type(), new self.cv.Scalar(0.686)), g_g);
+        self.cv.multiply(b, new self.cv.Mat(b.rows, b.cols, b.type(), new self.cv.Scalar(0.168)), g_b);
+        self.cv.add(g_r, g_g, newG);
+        self.cv.add(newG, g_b, newG);
+
+        // 计算 newB
+        const b_r = new self.cv.Mat();
+        const b_g = new self.cv.Mat();
+        const b_b = new self.cv.Mat();
+        self.cv.multiply(r, new self.cv.Mat(r.rows, r.cols, r.type(), new self.cv.Scalar(0.272)), b_r);
+        self.cv.multiply(g, new self.cv.Mat(g.rows, g.cols, g.type(), new self.cv.Scalar(0.534)), b_g);
+        self.cv.multiply(b, new self.cv.Mat(b.rows, b.cols, b.type(), new self.cv.Scalar(0.131)), b_b);
+        self.cv.add(b_r, b_g, newB);
+        self.cv.add(newB, b_b, newB);
+
+        // 合并新通道
+        const newChannels = new self.cv.MatVector();
+        newChannels.push_back(newR);
+        newChannels.push_back(newG);
+        newChannels.push_back(newB);
+        newChannels.push_back(channels.get(3)); // 保留原始 alpha 通道
+        self.cv.merge(newChannels, dst);
+
+        // 清理所有中间创建的 Mat 对象
+        channels.delete();
+        newChannels.delete();
+        r_r.delete(); r_g.delete(); r_b.delete();
+        g_r.delete(); g_g.delete(); g_b.delete();
+        b_r.delete(); b_g.delete(); b_b.delete();
+        newR.delete(); newG.delete(); newB.delete();
+        // r, g, b, a 是指向 channels 内存的引用，不需要单独 delete
+        
         break;
       }
       case 'colorBalance': {
