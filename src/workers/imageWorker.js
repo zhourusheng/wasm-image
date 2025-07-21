@@ -21,14 +21,14 @@ self.Module = {
     try {
         const response = await fetch('/js/opencv.wasm');
         if (!response.ok) {
-            throw new Error(`Failed to fetch wasm: ${response.status} ${response.statusText}`);
+            throw new Error(`加载 wasm 失败： ${response.status} ${response.statusText}`);
         }
         const buffer = await response.arrayBuffer();
         self.Module.wasmBinary = buffer;
         self.importScripts('/js/opencv.js');
     } catch (error) {
-        console.error("Failed to load OpenCV in worker:", error);
-        postMessage({ type: 'error', payload: 'Failed to initialize OpenCV.' });
+        console.error("在 worker 中加载 OpenCV 失败:", error);
+        postMessage({ type: 'error', payload: '初始化 OpenCV 失败。' });
     }
 })();
 
@@ -41,8 +41,8 @@ self.onmessage = async (e) => {
             processImage(payload.imageData, payload.action, payload.params);
         } else {
             // This should not happen if the UI waits for 'opencv-loaded'
-            console.error("OpenCV is not ready yet.");
-            postMessage({ type: 'error', payload: 'OpenCV is not ready.' });
+            console.error("OpenCV 尚未准备好。");
+            postMessage({ type: 'error', payload: 'OpenCV 尚未就绪。' });
         }
     }
 };
@@ -124,7 +124,7 @@ function processImage(imageData, action, params) {
         }
 
     } catch (error) {
-        console.error("Error in processImage:", error);
+        console.error("processImage 中出错:", error);
         self.postMessage({ type: 'error', payload: error.toString() });
     }
 } 

@@ -33,15 +33,15 @@ function App() {
         const { type, payload } = e.data;
         if (type === 'opencv-loaded') {
             setOpencvLoaded(true);
-            console.log("OpenCV loaded in worker.");
+            console.log("OpenCV 已在 worker 中加载。");
         } else if (type === 'image-processed') {
             updateCanvasWithState(payload.imageData);
             historyManager.add(payload.imageData);
             forceUpdate();
             setLoading(false);
         } else if (type === 'error') {
-            console.error("Error from worker:", payload);
-            alert("An error occurred during image processing: " + payload);
+            console.error("来自 worker 的错误:", payload);
+            alert("图像处理期间发生错误： " + payload);
             setLoading(false);
         }
     };
@@ -62,7 +62,7 @@ function App() {
   // Generic function to handle image editing
   const processEdit = useCallback((op, params = {}) => {
     if (!canvasRef.current || !opencvLoaded) {
-        alert("OpenCV is not ready yet.");
+        alert("OpenCV 尚未准备好。");
         return;
     }
     setLoading(true);
@@ -99,10 +99,10 @@ function App() {
   
   const handleDownloadClick = () => {
     if (!image) {
-      alert('Please upload an image first');
+      alert('请先上传一张图片');
       return;
     }
-    exportImage(canvasRef.current, 'edited-image');
+    exportImage(canvasRef.current, '已编辑图像');
   };
   
   const handleUndo = () => {
@@ -135,7 +135,7 @@ function App() {
   // Crop related functions
   const handleCropModeToggle = () => {
     if (!image) {
-      alert('Please upload an image first');
+      alert('请先上传一张图片');
       return;
     }
     setIsCropMode(!isCropMode);
@@ -146,11 +146,11 @@ function App() {
 
   const handleCropConfirm = async () => {
     if (!cropArea) {
-      alert('Please select a crop area first');
+      alert('请先选择裁剪区域');
       return;
     }
     if (cropArea.width < 10 || cropArea.height < 10) {
-      alert('Crop area is too small');
+      alert('裁剪区域太小');
       return;
     }
     processEdit('crop', cropArea);
@@ -246,7 +246,7 @@ function App() {
       <header className="flex items-center justify-between px-4 h-14 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10">
         <div className="flex items-center space-x-2">
           <ImagePlay size={28} className="text-blue-500" />
-          <h1 className="font-semibold text-lg">Wasm Image Editor</h1>
+          <h1 className="font-semibold text-lg">Wasm 图像编辑器</h1>
         </div>
         <div className="flex items-center space-x-2">
           <input
@@ -256,10 +256,10 @@ function App() {
             className="hidden"
             accept="image/png, image/jpeg, image/webp"
           />
-          <button className="icon-btn" onClick={handleUploadClick}>
+          <button className="icon-btn" onClick={handleUploadClick} title="打开文件">
             <Folder size={20} />
           </button>
-          <button className="icon-btn" onClick={handleDownloadClick}>
+          <button className="icon-btn" onClick={handleDownloadClick} title="下载图像">
             <Download size={20} />
           </button>
         </div>
@@ -268,28 +268,29 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left Toolbar */}
         <aside className="w-16 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-2">
-           <button className="icon-btn" onClick={handleGrayscale} disabled={!image || loading}><SlidersHorizontal size={24} /></button>
-           <button className="icon-btn" onClick={handleBlur} disabled={!image || loading}>B</button>
-           <button className="icon-btn" onClick={handleCanny} disabled={!image || loading}>C</button>
-           <button className="icon-btn" onClick={handleThreshold} disabled={!image || loading}>T</button>
+           <button className="icon-btn" onClick={handleGrayscale} disabled={!image || loading} title="灰度"><SlidersHorizontal size={24} /></button>
+           <button className="icon-btn" onClick={handleBlur} disabled={!image || loading} title="模糊">B</button>
+           <button className="icon-btn" onClick={handleCanny} disabled={!image || loading} title="边缘检测">C</button>
+           <button className="icon-btn" onClick={handleThreshold} disabled={!image || loading} title="阈值">T</button>
            <button 
             className={`icon-btn ${isCropMode ? 'active' : ''}`}
             onClick={handleCropModeToggle}
             disabled={!image || loading}
+            title="裁剪"
            >
             <Crop size={24} />
           </button>
           <div className="pt-2 border-t border-gray-200 dark:border-gray-700 w-full flex flex-col items-center space-y-2">
-             <button className="icon-btn" onClick={handleRotateCw} disabled={!image || loading}>
+             <button className="icon-btn" onClick={handleRotateCw} disabled={!image || loading} title="顺时针旋转">
               <RotateCw size={24} />
             </button>
-            <button className="icon-btn" onClick={handleRotateCcw} disabled={!image || loading}>
+            <button className="icon-btn" onClick={handleRotateCcw} disabled={!image || loading} title="逆时针旋转">
               <RotateCcw size={24} />
             </button>
-            <button className="icon-btn" onClick={handleFlipH} disabled={!image || loading}>
+            <button className="icon-btn" onClick={handleFlipH} disabled={!image || loading} title="水平翻转">
               <FlipHorizontal size={24} />
             </button>
-             <button className="icon-btn" onClick={handleFlipV} disabled={!image || loading}>
+             <button className="icon-btn" onClick={handleFlipV} disabled={!image || loading} title="垂直翻转">
               <FlipVertical size={24} />
             </button>
           </div>
@@ -300,25 +301,25 @@ function App() {
           {/* Top bar for main content */}
           <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-2">
-              <button className="icon-btn" onClick={handleUndo} disabled={!historyManager.canUndo() || loading}>
+              <button className="icon-btn" onClick={handleUndo} disabled={!historyManager.canUndo() || loading} title="撤销">
                 <Undo size={20} />
               </button>
-              <button className="icon-btn" onClick={handleRedo} disabled={!historyManager.canRedo() || loading}>
+              <button className="icon-btn" onClick={handleRedo} disabled={!historyManager.canRedo() || loading} title="重做">
                 <Redo size={20} />
               </button>
             </div>
             {isCropMode && (
               <div className="flex items-center space-x-2">
-                <button className="icon-btn text-green-500" onClick={handleCropConfirm}>
+                <button className="icon-btn text-green-500" onClick={handleCropConfirm} title="确认">
                   <Check size={20} />
                 </button>
-                <button className="icon-btn text-red-500" onClick={handleCropCancel}>
+                <button className="icon-btn text-red-500" onClick={handleCropCancel} title="取消">
                   <X size={20} />
                 </button>
               </div>
             )}
             <div className='text-sm text-gray-500'>
-                {loading ? "Processing..." : (opencvLoaded ? "OpenCV Ready" : "Loading OpenCV...")}
+                {loading ? "处理中..." : (opencvLoaded ? "OpenCV 已就绪" : "正在加载 OpenCV...")}
             </div>
           </div>
 
@@ -336,10 +337,10 @@ function App() {
             {!image && (
               <div className="absolute flex items-center justify-center inset-0">
                 <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
-                  <h2 className="text-2xl font-semibold mb-2">No Image Loaded</h2>
-                  <p className="text-gray-500 dark:text-gray-400">Upload an image to start editing</p>
+                  <h2 className="text-2xl font-semibold mb-2">未加载图像</h2>
+                  <p className="text-gray-500 dark:text-gray-400">上传一张图片开始编辑</p>
                   <button onClick={handleUploadClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
-                    Upload Image
+                    上传图片
                   </button>
                 </div>
               </div>
@@ -349,7 +350,7 @@ function App() {
           {/* Footer */}
           <footer className="h-10 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm">
             <div>
-              <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : 'No Image'}</span>
+              <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
             </div>
           </footer>
         </main>

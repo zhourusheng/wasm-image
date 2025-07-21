@@ -24,7 +24,7 @@ export async function initWasm() {
         resolve();
       };
     } else {
-      reject(new Error('OpenCV not found. Make sure it is imported in the worker.'));
+      reject(new Error('未找到 OpenCV。请确保它已在 worker 中导入。'));
     }
   });
 }
@@ -159,7 +159,7 @@ export async function processImage(imageData, op, params) {
     
     return result;
   } catch (error) {
-    console.error('OpenCV处理错误:', error);
+    console.error('OpenCV 处理错误:', error);
     throw new Error(`处理图像时出错: ${error.message}`);
   } finally {
     // 清理内存
