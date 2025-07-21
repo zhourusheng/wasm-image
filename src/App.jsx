@@ -5,6 +5,7 @@ import {
 import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
 import { logPerformanceToConsole } from './utils/performanceLogger';
+import { applySepiaJS, applyGaussianBlurJS } from './utils/filters';
 
 function App() {
   const [image, setImage] = useState(null);
@@ -188,6 +189,63 @@ function App() {
     }
   };
   
+  const handleSepiaCompare = () => {
+    if (!image || loading) return;
+
+    const currentImageData = historyManager.getCurrentState();
+    if (!currentImageData) {
+        alert("没有可用的图像数据。");
+        return;
+    }
+
+    console.log('%c--- 开始性能对比：Sepia 滤镜 ---', 'background: #222; color: #bada55');
+
+    // 1. 测试纯 JavaScript 版本
+    const startTime = performance.now();
+    applySepiaJS(currentImageData); // 我们只执行它来测量时间，不使用其返回结果
+    const endTime = performance.now();
+    const jsDuration = (endTime - startTime).toFixed(2);
+    
+    console.group(`%cJavaScript 版本`, 'color: #f0ad4e;');
+    console.log(`图像尺寸: ${currentImageData.width}x${currentImageData.height}`);
+    console.log(`主线程耗时: ${jsDuration}ms`);
+    console.groupEnd();
+    
+    // 2. 触发 WebAssembly 版本进行处理和渲染
+    // processEdit 函数会处理加载状态和历史记录，并触发 Wasm 的性能日志
+    console.log('现在触发 WebAssembly 版本...');
+    processEdit('sepia');
+  };
+
+  const handleBlurCompare = () => {
+    if (!image || loading) return;
+
+    const currentImageData = historyManager.getCurrentState();
+    if (!currentImageData) {
+        alert("没有可用的图像数据。");
+        return;
+    }
+    
+    const params = { ksize: 5 }; // 使用固定的模糊半径进行对比
+
+    console.log('%c--- 开始性能对比：高斯模糊 (ksize=5) ---', 'background: #222; color: #bada55');
+
+    // 1. 测试纯 JavaScript 版本
+    const startTime = performance.now();
+    applyGaussianBlurJS(currentImageData, params);
+    const endTime = performance.now();
+    const jsDuration = (endTime - startTime).toFixed(2);
+    
+    console.group(`%cJavaScript 版本`, 'color: #f0ad4e;');
+    console.log(`图像尺寸: ${currentImageData.width}x${currentImageData.height}`);
+    console.log(`主线程耗时: ${jsDuration}ms`);
+    console.groupEnd();
+    
+    // 2. 触发 WebAssembly 版本
+    console.log('现在触发 WebAssembly 版本...');
+    processEdit('blur', params);
+  };
+
   const handleRedo = () => {
     if (!historyManager.canRedo()) return;
     const nextState = historyManager.redo();
@@ -569,11 +627,13 @@ function App() {
           <div className="flex flex-col items-center space-y-1 w-full">
             <span className="font-medium text-gray-500">效果</span>
             <button className="icon-btn-group" onClick={() => processEdit('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
-            <button className={`icon-btn-group ${activeTool === 'blur' ? 'active' : ''}`} onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
+            <button className={`icon-btn-group ${activeTool === 'blur' ? 'active' : ''}`} onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊 (Wasm)">B</button>
+            <button className="icon-btn-group" onClick={handleBlurCompare} disabled={!image || loading} title="模糊 (JS 对比)">JS</button>
             <button className="icon-btn-group" onClick={() => processEdit('canny')} disabled={!image || loading} title="边缘检测">C</button>
             <button className="icon-btn-group" onClick={() => processEdit('threshold')} disabled={!image || loading} title="阈值">T</button>
             <button className="icon-btn-group" onClick={() => processEdit('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
-            <button className="icon-btn-group" onClick={() => processEdit('sepia')} disabled={!image || loading} title="复古">S</button>
+            <button className="icon-btn-group" onClick={() => processEdit('sepia')} disabled={!image || loading} title="复古 (Wasm)">S</button>
+            <button className="icon-btn-group" onClick={handleSepiaCompare} disabled={!image || loading} title="复古 (JS 对比)">JS</button>
           </div>
 
           <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
