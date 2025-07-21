@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X
+  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Scaling, Copy
 } from 'lucide-react';
-import { loadImageFromFile, getImageDataFromImage, exportImage } from './utils/imageUtils';
+import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
 
 function App() {
@@ -16,7 +16,6 @@ function App() {
   const cropCanvasRef = useRef(null); // 用于裁剪的覆盖层 Canvas
   const fileInputRef = useRef(null);
   const historyManager = useRef(new HistoryManager()).current;
-  // 移除 cropBitmapRef，使用更简单的方法
   const originalImageRef = useRef(null);
 
   // worker 实例
@@ -25,22 +24,26 @@ function App() {
   const [workerReady, setWorkerReady] = useState(false); // 跟踪 worker 是否准备好接收任务
   const [loading, setLoading] = useState(false);
   
+  // 新增：右侧参数面板相关状态
+  const [activeTool, setActiveTool] = useState(null);
+  const [toolParams, setToolParams] = useState({});
+  const [stagedImage, setStagedImage] = useState(null); // 用于暂存进入工具调整前的图像状态
+
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
   const forceUpdate = () => setTick(tick => tick + 1);
 
   // 通用图像编辑处理函数
-  // 将此函数定义移到所有调用它的函数之前
-  const processEdit = useCallback((op, params = {}) => {
+  const processEdit = useCallback((op, params = {}, isPreview = false) => {
     if (!canvasRef.current || !workerReady) {
         alert("Worker 尚未准备好。");
         return;
     }
     setLoading(true);
 
-    // 获取当前状态用于处理
-    const currentImageData = historyManager.getCurrentState();
-    if (!currentImageData) {
+    // 预览时基于暂存的图像，否则基于历史记录的当前状态
+    const baseImage = isPreview && stagedImage ? stagedImage : historyManager.getCurrentState();
+    if (!baseImage) {
         alert("没有可用的图像数据。");
         setLoading(false);
         return;
@@ -48,10 +51,10 @@ function App() {
 
     console.log(`开始处理图像操作: ${op}`, params);
     
-    // 发送当前图像数据和操作给 worker
-    imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: currentImageData, action: op, params } });
+    // isHistoryNavigation 标志告诉 worker 这是否是一个不应保存到历史记录的预览操作
+    imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: baseImage, action: op, params, isHistoryNavigation: isPreview } });
     
-  }, [workerReady, historyManager]);
+  }, [workerReady, historyManager, stagedImage]);
   
   // 主 effect，用于 Worker 初始化，仅运行一次
   useEffect(() => {
@@ -65,7 +68,6 @@ function App() {
                 setOpencvLoaded(true);
                 console.log("OpenCV 已在 worker 中加载。");
                 if (canvasRef.current) {
-                    // 这一步现在只会执行一次
                     const offscreen = canvasRef.current.transferControlToOffscreen();
                     worker.postMessage({ type: 'init', payload: { canvas: offscreen } }, [offscreen]);
                 }
@@ -76,10 +78,9 @@ function App() {
                 break;
             case 'image-processed':
                 console.log('Worker 完成图像处理');
-                // 现在我们从 worker 接收 imageData 用于历史记录
                 if (payload.imageData) {
                     setImageSize({ width: payload.imageData.width, height: payload.imageData.height });
-                    // 仅当不是历史导航时才添加到历史记录
+                    // 仅当不是历史导航/预览时才添加到历史记录
                     if (!payload.isHistoryNavigation) {
                         historyManager.add(payload.imageData);
                     }
@@ -109,8 +110,6 @@ function App() {
     }
   }, [image, workerReady]);
 
-  // 此处移除了 processEdit 的定义，因为它已被移到前面
-
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -137,6 +136,19 @@ function App() {
     exportImage(canvasRef.current, '已编辑图像');
   };
   
+  const handleCopyClick = async () => {
+    if (!image) {
+      alert('请先上传一张图片');
+      return;
+    }
+    try {
+      await copyImageToClipboard(canvasRef.current);
+      alert('已复制到剪贴板！');
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
   const handleUndo = () => {
     if (!historyManager.canUndo()) return;
     const prevState = historyManager.undo();
@@ -159,17 +171,48 @@ function App() {
     }
   };
 
-  // --- 所有工具函数现在都使用 processEdit ---
+  // --- 工具栏按钮现在用于激活工具 ---
+  const handleToolActivate = (toolName, defaultParams = {}) => {
+    if (!image) {
+        alert('请先上传一张图片');
+        return;
+    }
+    setActiveTool(toolName);
+    setToolParams(defaultParams);
+    setStagedImage(historyManager.getCurrentState());
+    // 立即应用一次默认效果作为预览
+    if (Object.keys(defaultParams).length > 0) {
+      processEdit(toolName, defaultParams, true);
+    }
+  };
+  
+  const handleParamsChange = (newParams) => {
+    const updatedParams = { ...toolParams, ...newParams };
+    setToolParams(updatedParams);
+    processEdit(activeTool, updatedParams, true);
+  };
+
+  const handleApplyTool = () => {
+    processEdit(activeTool, toolParams, false); // isPreview is false to add to history
+    setActiveTool(null);
+    setStagedImage(null);
+  };
+  
+  const handleCancelTool = () => {
+    // 恢复到未应用工具前的状态
+    if (stagedImage) {
+      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: stagedImage, action: 'original', isHistoryNavigation: true } });
+    }
+    setActiveTool(null);
+    setStagedImage(null);
+  };
+
+  // --- 原始编辑功能 ---
   const handleRotateCw = () => processEdit('rotate', { angle: 90 });
   const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
   const handleFlipH = () => processEdit('flip', { mode: 0 });
   const handleFlipV = () => processEdit('flip', { mode: 1 });
-  const handleBlur = () => processEdit('blur', { ksize: 5 });
-  const handleGrayscale = () => processEdit('grayscale');
-  const handleCanny = () => processEdit('canny');
-  const handleThreshold = () => processEdit('threshold');
-
-
+  
   // 裁剪相关函数
   const handleCropModeToggle = () => {
     if (!image) {
@@ -352,6 +395,86 @@ function App() {
     
   }, [cropArea, isCropMode, historyManager]);
   
+  // 右侧参数面板组件
+  const ParamsPanel = () => {
+    if (!activeTool) return null;
+
+    const getParamUI = () => {
+      switch(activeTool) {
+        case 'blur':
+          return (
+            <div className="space-y-2">
+              <label htmlFor="ksize" className="text-sm">模糊半径</label>
+              <input id="ksize" type="range" min="1" max="21" step="2" value={toolParams.ksize || 5}
+                onChange={(e) => handleParamsChange({ ksize: parseInt(e.target.value, 10) })}/>
+              <div className="text-center text-sm">{toolParams.ksize || 5}</div>
+            </div>
+          );
+        case 'brightness':
+          return (
+            <div className="space-y-2">
+              <label htmlFor="delta" className="text-sm">亮度</label>
+              <input id="delta" type="range" min="-100" max="100" step="1" value={toolParams.delta || 0}
+                onChange={(e) => handleParamsChange({ delta: parseInt(e.target.value, 10) })}/>
+              <div className="text-center text-sm">{toolParams.delta || 0}</div>
+            </div>
+          );
+        case 'contrast':
+          return (
+            <div className="space-y-2">
+              <label htmlFor="factor" className="text-sm">对比度</label>
+              <input id="factor" type="range" min="0.1" max="3" step="0.1" value={toolParams.factor || 1}
+                onChange={(e) => handleParamsChange({ factor: parseFloat(e.target.value) })}/>
+              <div className="text-center text-sm">{toolParams.factor || 1}</div>
+            </div>
+          );
+        case 'saturation':
+          return (
+            <div className="space-y-2">
+              <label htmlFor="factor" className="text-sm">饱和度</label>
+              <input id="factor" type="range" min="0" max="3" step="0.1" value={toolParams.factor || 1}
+                onChange={(e) => handleParamsChange({ factor: parseFloat(e.target.value) })}/>
+              <div className="text-center text-sm">{toolParams.factor || 1}</div>
+            </div>
+          );
+        case 'resize':
+          return (
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="width" className="text-sm">宽度</label>
+                <input id="width" type="number" value={toolParams.width || ''}
+                  onChange={(e) => handleParamsChange({ width: parseInt(e.target.value, 10) || 0, height: 0 })} // 调整一个值时重置另一个，以保持比例
+                  className="w-full p-1 bg-gray-100 dark:bg-gray-700 rounded-md"
+                />
+              </div>
+              <div>
+                <label htmlFor="height" className="text-sm">高度</label>
+                <input id="height" type="number" value={toolParams.height || ''}
+                  onChange={(e) => handleParamsChange({ height: parseInt(e.target.value, 10) || 0, width: 0 })}
+                  className="w-full p-1 bg-gray-100 dark:bg-gray-700 rounded-md"
+                />
+              </div>
+            </div>
+          );
+        default:
+          return <p className="text-sm text-gray-500">该功能无参数可调。</p>;
+      }
+    };
+
+    return (
+      <aside className="w-64 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 p-4 flex flex-col">
+        <h3 className="text-lg font-semibold mb-4 capitalize">{activeTool}</h3>
+        
+        {getParamUI()}
+
+        <div className="mt-auto pt-4 space-x-2 flex justify-end">
+          <button onClick={handleCancelTool} className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500">取消</button>
+          <button onClick={handleApplyTool} className="px-4 py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600">应用</button>
+        </div>
+      </aside>
+    );
+  };
+  
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
       {/* 头部 */}
@@ -371,6 +494,9 @@ function App() {
           <button className="icon-btn" onClick={handleUploadClick} title="打开文件">
             <Folder size={20} />
           </button>
+          <button className="icon-btn" onClick={handleCopyClick} title="复制图像">
+            <Copy size={20} />
+          </button>
           <button className="icon-btn" onClick={handleDownloadClick} title="下载图像">
             <Download size={20} />
           </button>
@@ -380,10 +506,14 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧工具栏 */}
         <aside className="w-16 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-2">
-           <button className="icon-btn" onClick={handleGrayscale} disabled={!image || loading} title="灰度"><SlidersHorizontal size={24} /></button>
-           <button className="icon-btn" onClick={handleBlur} disabled={!image || loading} title="模糊">B</button>
-           <button className="icon-btn" onClick={handleCanny} disabled={!image || loading} title="边缘检测">C</button>
-           <button className="icon-btn" onClick={handleThreshold} disabled={!image || loading} title="阈值">T</button>
+           <button className="icon-btn" onClick={() => handleToolActivate('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={24} /></button>
+           <button className="icon-btn" onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
+           <button className="icon-btn" onClick={() => handleToolActivate('canny')} disabled={!image || loading} title="边缘检测">C</button>
+           <button className="icon-btn" onClick={() => handleToolActivate('threshold')} disabled={!image || loading} title="阈值">T</button>
+           <button className="icon-btn" onClick={() => handleToolActivate('brightness', { delta: 0 })} disabled={!image || loading} title="亮度"><Sun size={24} /></button>
+           <button className="icon-btn" onClick={() => handleToolActivate('contrast', { factor: 1 })} disabled={!image || loading} title="对比度"><Contrast size={24} /></button>
+           <button className="icon-btn" onClick={() => handleToolActivate('saturation', { factor: 1 })} disabled={!image || loading} title="饱和度"><Droplets size={24} /></button>
+           <button className="icon-btn" onClick={() => handleToolActivate('resize', { width: imageSize.width, height: imageSize.height })} disabled={!image || loading} title="缩放"><Scaling size={24} /></button>
            <button 
             className={`icon-btn ${isCropMode ? 'active' : ''}`}
             onClick={handleCropModeToggle}
@@ -471,6 +601,9 @@ function App() {
             </div>
           </footer>
         </main>
+
+        {/* 右侧参数面板 */}
+        <ParamsPanel />
       </div>
     </div>
   );

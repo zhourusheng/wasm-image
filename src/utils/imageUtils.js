@@ -62,4 +62,28 @@ export const exportImage = (canvas, filename = 'edited-image.png') => {
     link.download = filename;
     link.href = canvas.toDataURL('image/png');
     link.click();
+};
+
+/**
+ * 将 Canvas 内容复制到剪贴板
+ * @param {HTMLCanvasElement} canvas - 源 Canvas
+ * @returns {Promise<void>}
+ */
+export const copyImageToClipboard = async (canvas) => {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(async (blob) => {
+            if (!blob) {
+                return reject(new Error('无法创建 Blob 对象'));
+            }
+            try {
+                await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob })
+                ]);
+                resolve();
+            } catch (err) {
+                console.error('复制到剪贴板失败:', err);
+                reject(new Error('复制到剪贴板失败。浏览器可能不支持或未授予权限。'));
+            }
+        }, 'image/png');
+    });
 }; 

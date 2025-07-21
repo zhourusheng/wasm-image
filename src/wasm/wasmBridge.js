@@ -78,22 +78,34 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
         matrix.delete();
         break;
       }
+      case 'resize': {
+        let { width, height } = params;
+        if (!width && !height) {
+          dst = src.clone();
+          break;
+        }
+        
+        const aspectRatio = src.cols / src.rows;
+        if (width && !height) {
+          height = Math.round(width / aspectRatio);
+        } else if (height && !width) {
+          width = Math.round(height * aspectRatio);
+        }
+
+        dst = new self.cv.Mat();
+        self.cv.resize(src, dst, new self.cv.Size(width, height), 0, 0, self.cv.INTER_AREA);
+        break;
+      }
       case 'flip': {
         const { mode } = params;
         dst = new self.cv.Mat();
         self.cv.flip(src, dst, mode); // 0: x轴翻转(水平), 1: y轴翻转(垂直), -1: 同时翻转
         break;
       }
-      case 'resize': {
-        const { width, height } = params;
-        dst = new self.cv.Mat();
-        self.cv.resize(src, dst, new self.cv.Size(width, height), 0, 0, self.cv.INTER_AREA);
-        break;
-      }
       case 'brightness': {
         const { delta } = params;
         dst = new self.cv.Mat();
-        src.convertTo(dst, -1, 1, delta); // -1表示与输入相同的类型
+        src.convertTo(dst, -1, 1, delta); // -1 表示与输入相同的类型
         break;
       }
       case 'contrast': {
@@ -105,36 +117,20 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
       case 'saturation': {
         const { factor } = params;
         dst = new self.cv.Mat();
+        self.cv.cvtColor(src, dst, self.cv.COLOR_RGBA2RGB); // 饱和度调整通常在 HSV 空间
+        self.cv.cvtColor(dst, dst, self.cv.COLOR_RGB2HSV);
         
-        // 将图像转换为HSV颜色空间
-        if (src.channels() === 4) {
-          self.cv.cvtColor(src, dst, self.cv.COLOR_RGBA2RGB);
-          self.cv.cvtColor(dst, dst, self.cv.COLOR_RGB2HSV);
-        } else {
-          self.cv.cvtColor(src, dst, self.cv.COLOR_RGB2HSV);
-        }
-        
-        // 分离通道
         const channels = new self.cv.MatVector();
         self.cv.split(dst, channels);
-        
-        // 调整饱和度通道 (通道1是饱和度)
         const satChannel = channels.get(1);
         satChannel.convertTo(satChannel, -1, factor, 0);
-        
-        // 合并通道
         self.cv.merge(channels, dst);
         
-        // 转换回RGB/RGBA
-        if (src.channels() === 4) {
-          self.cv.cvtColor(dst, dst, self.cv.COLOR_HSV2RGB);
-          self.cv.cvtColor(dst, dst, self.cv.COLOR_RGB2RGBA);
-        } else {
-          self.cv.cvtColor(dst, dst, self.cv.COLOR_HSV2RGB);
-        }
+        self.cv.cvtColor(dst, dst, self.cv.COLOR_HSV2RGB);
+        self.cv.cvtColor(dst, dst, self.cv.COLOR_RGB2RGBA);
         
-        // 清理
         channels.delete();
+        satChannel.delete(); // 虽然satChannel是指向channels的，但显式删除更安全
         break;
       }
       case 'blur': {
