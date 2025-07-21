@@ -126,10 +126,41 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
         break;
       }
       case 'blur': {
-        const { ksize } = params;
+        const ksize = (params && params.ksize) || 5; // 提供默认值
+        // 确保 ksize 是一个奇数
+        const validKsize = ksize % 2 === 0 ? ksize + 1 : ksize;
         dst = new self.cv.Mat();
-        const kernelSize = new self.cv.Size(ksize, ksize);
+        const kernelSize = new self.cv.Size(validKsize, validKsize);
         self.cv.GaussianBlur(src, dst, kernelSize, 0);
+        break;
+      }
+      case 'grayscale': {
+        dst = new self.cv.Mat();
+        self.cv.cvtColor(src, dst, self.cv.COLOR_RGBA2GRAY, 0);
+        // 为了显示，需要转换回RGBA
+        self.cv.cvtColor(dst, dst, self.cv.COLOR_GRAY2RGBA, 0);
+        break;
+      }
+      case 'canny': {
+        // Canny 输出的是单通道灰度图
+        const temp = new self.cv.Mat();
+        self.cv.cvtColor(src, temp, self.cv.COLOR_RGBA2GRAY, 0);
+        dst = new self.cv.Mat();
+        self.cv.Canny(temp, dst, 50, 100, 3, false);
+        // 为了显示，需要转换回RGBA
+        self.cv.cvtColor(dst, dst, self.cv.COLOR_GRAY2RGBA, 0);
+        temp.delete();
+        break;
+      }
+      case 'threshold': {
+        // Threshold 输出的是单通道灰度图
+        const temp = new self.cv.Mat();
+        self.cv.cvtColor(src, temp, self.cv.COLOR_RGBA2GRAY, 0);
+        dst = new self.cv.Mat();
+        self.cv.threshold(temp, dst, 127, 255, self.cv.THRESH_BINARY);
+        // 为了显示，需要转换回RGBA
+        self.cv.cvtColor(dst, dst, self.cv.COLOR_GRAY2RGBA, 0);
+        temp.delete();
         break;
       }
       case 'sharpen': {
@@ -163,15 +194,18 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
     // 解决方案：由于 worker 中没有 HTMLCanvasElement，我们不使用 cv.imshow(canvas, mat)
     // 而是创建一个 ImageData，用 mat 的数据填充它，然后用 putImageData 渲染
     const imageData = ctx.createImageData(dst.cols, dst.rows);
-    imageData.data.set(new Uint8ClampedArray(dst.data, dst.cols, dst.rows));
+    // 修复：直接从 dst.data 设置数据，之前的参数是错误的
+    imageData.data.set(dst.data);
     ctx.putImageData(imageData, 0, 0);
 
     // 将 ImageData 返回，以便 worker 可以将其发送回主线程用于历史记录
     return imageData;
 
   } catch (error) {
-    console.error('OpenCV 处理错误:', error);
-    throw new Error(`处理图像时出错: ${error.message}`);
+    console.error(`OpenCV operation '${op}' failed:`, error);
+    // 抛出更具体的错误信息
+    const errorMessage = error.message || 'An unknown error occurred';
+    throw new Error(`处理 '${op}' 操作时出错: ${errorMessage}`);
   } finally {
     // 清理内存
     src.delete();

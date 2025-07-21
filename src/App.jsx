@@ -79,7 +79,10 @@ function App() {
                 // 现在我们从 worker 接收 imageData 用于历史记录
                 if (payload.imageData) {
                     setImageSize({ width: payload.imageData.width, height: payload.imageData.height });
-                    historyManager.add(payload.imageData);
+                    // 仅当不是历史导航时才添加到历史记录
+                    if (!payload.isHistoryNavigation) {
+                        historyManager.add(payload.imageData);
+                    }
                     forceUpdate(); // 更新撤销/重做按钮状态
                 }
                 setLoading(false);
@@ -139,8 +142,8 @@ function App() {
     const prevState = historyManager.undo();
     if (prevState && workerReady) {
       setLoading(true);
-      // 将历史状态发送给 worker 进行重绘
-      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: prevState, action: 'original' } });
+      // 将历史状态发送给 worker 进行重绘，并标记为历史导航
+      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: prevState, action: 'original', isHistoryNavigation: true } });
       forceUpdate();
     }
   };
@@ -150,8 +153,8 @@ function App() {
     const nextState = historyManager.redo();
     if (nextState && workerReady) {
       setLoading(true);
-      // 将历史状态发送给 worker 进行重绘
-      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: nextState, action: 'original' } });
+      // 将历史状态发送给 worker 进行重绘，并标记为历史导航
+      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: nextState, action: 'original', isHistoryNavigation: true } });
       forceUpdate();
     }
   };
@@ -161,7 +164,7 @@ function App() {
   const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
   const handleFlipH = () => processEdit('flip', { mode: 0 });
   const handleFlipV = () => processEdit('flip', { mode: 1 });
-  const handleBlur = () => processEdit('blur');
+  const handleBlur = () => processEdit('blur', { ksize: 5 });
   const handleGrayscale = () => processEdit('grayscale');
   const handleCanny = () => processEdit('canny');
   const handleThreshold = () => processEdit('threshold');

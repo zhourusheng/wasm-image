@@ -52,7 +52,7 @@ self.onmessage = async (e) => {
                 try {
                     const resultImageData = await self.wasmProcessImage(payload.imageData, payload.action, payload.params, ctx);
                     // 将包含 ArrayBuffer 的结果发送回主线程，并将其标记为可转移
-                    postMessage({ type: 'image-processed', payload: { imageData: resultImageData } }, [resultImageData.data.buffer]);
+                    postMessage({ type: 'image-processed', payload: { imageData: resultImageData, isHistoryNavigation: payload.isHistoryNavigation || false } }, [resultImageData.data.buffer]);
                 } catch (error) {
                     console.error("图像处理时发生错误:", error);
                     postMessage({ type: 'error', payload: error.message });
