@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Scaling, Copy, Wand2, Palette
+  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Palette, Copy, Wand2
 } from 'lucide-react';
 import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
@@ -29,9 +29,12 @@ function App() {
   const [toolParams, setToolParams] = useState({});
   const [stagedImage, setStagedImage] = useState(null); // 用于暂存进入工具调整前的图像状态
 
-  // 新增：控制画布渲染后显示，避免白框闪烁
+  // 控制画布渲染后显示，避免白框闪烁
   const [isCanvasRendered, setIsCanvasRendered] = useState(false);
-  const loaderTimeoutRef = useRef(null); // 新增：用于延迟显示加载动画
+  const loaderTimeoutRef = useRef(null); // 用于延迟显示加载动画
+
+  // 新增：视图缩放状态
+  const [zoom, setZoom] = useState(1); // 1 = 100%
 
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
@@ -230,6 +233,12 @@ function App() {
     setStagedImage(null);
   };
 
+  // --- 视图缩放功能 ---
+  const handleZoom = (newZoom) => {
+    const clampedZoom = Math.max(0.1, Math.min(newZoom, 5)); // 限制缩放在 10% 到 500% 之间
+    setZoom(clampedZoom);
+  };
+  
   // --- 原始编辑功能 ---
   const handleRotateCw = () => processEdit('rotate', { angle: 90 });
   const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
@@ -460,25 +469,6 @@ function App() {
               <div className="text-center text-sm">{toolParams.factor || 1}</div>
             </div>
           );
-        case 'resize':
-          return (
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="width" className="text-sm">宽度</label>
-                <input id="width" type="number" value={toolParams.width || ''}
-                  onChange={(e) => handleParamsChange({ width: parseInt(e.target.value, 10) || 0, height: 0 })} // 调整一个值时重置另一个，以保持比例
-                  className="w-full p-1 bg-gray-100 dark:bg-gray-700 rounded-md"
-                />
-              </div>
-              <div>
-                <label htmlFor="height" className="text-sm">高度</label>
-                <input id="height" type="number" value={toolParams.height || ''}
-                  onChange={(e) => handleParamsChange({ height: parseInt(e.target.value, 10) || 0, width: 0 })}
-                  className="w-full p-1 bg-gray-100 dark:bg-gray-700 rounded-md"
-                />
-              </div>
-            </div>
-          );
         case 'colorBalance':
           return (
             <div className="space-y-4">
@@ -566,12 +556,12 @@ function App() {
           {/* 效果 */}
           <div className="flex flex-col items-center space-y-1 w-full">
             <span className="font-medium text-gray-500">效果</span>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
+            <button className="icon-btn-group" onClick={() => processEdit('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
             <button className="icon-btn-group" onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('canny')} disabled={!image || loading} title="边缘检测">C</button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('threshold')} disabled={!image || loading} title="阈值">T</button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('sepia')} disabled={!image || loading} title="复古">S</button>
+            <button className="icon-btn-group" onClick={() => processEdit('canny')} disabled={!image || loading} title="边缘检测">C</button>
+            <button className="icon-btn-group" onClick={() => processEdit('threshold')} disabled={!image || loading} title="阈值">T</button>
+            <button className="icon-btn-group" onClick={() => processEdit('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
+            <button className="icon-btn-group" onClick={() => processEdit('sepia')} disabled={!image || loading} title="复古">S</button>
           </div>
 
           <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
@@ -580,7 +570,6 @@ function App() {
           <div className="flex flex-col items-center space-y-1 w-full">
             <span className="font-medium text-gray-500">变换</span>
             <button className="icon-btn-group" onClick={handleCropModeToggle} disabled={!image || loading} title="裁剪"><Crop size={20} /></button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('resize', { width: imageSize.width, height: imageSize.height })} disabled={!image || loading} title="缩放"><Scaling size={20} /></button>
             <button className="icon-btn-group" onClick={handleRotateCw} disabled={!image || loading} title="顺时针旋转"><RotateCw size={20} /></button>
             <button className="icon-btn-group" onClick={handleRotateCcw} disabled={!image || loading} title="逆时针旋转"><RotateCcw size={20} /></button>
             <button className="icon-btn-group" onClick={handleFlipH} disabled={!image || loading} title="水平翻转"><FlipHorizontal size={20} /></button>
@@ -622,20 +611,22 @@ function App() {
                 <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
               </div>
             )}
-            <canvas 
-              id="canvas" 
-              ref={canvasRef} 
-              className={`max-w-full max-h-full shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
-            ></canvas>
-            <canvas
-              id="crop-canvas"
-              ref={cropCanvasRef}
-              className={`absolute ${!isCropMode ? 'hidden' : 'cursor-crosshair'}`}
-              onMouseDown={handleCanvasMouseDown}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseUp={handleCanvasMouseUp}
-              onMouseLeave={handleCanvasMouseUp}
-            ></canvas>
+            <div style={{ transform: `scale(${zoom})` }}>
+              <canvas 
+                id="canvas" 
+                ref={canvasRef} 
+                className={`max-w-full max-h-full shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
+              ></canvas>
+              <canvas
+                id="crop-canvas"
+                ref={cropCanvasRef}
+                className={`absolute top-0 left-0 ${!isCropMode ? 'hidden' : 'cursor-crosshair'}`}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
+                onMouseLeave={handleCanvasMouseUp}
+              ></canvas>
+            </div>
             {!image && (
               <div className="absolute flex items-center justify-center inset-0">
                 <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
@@ -650,10 +641,17 @@ function App() {
           </div>
           
           {/* 底部 */}
-          <footer className="h-10 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm">
+          <footer className="h-10 flex items-center justify-between px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm">
             <div>
               <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
             </div>
+            {image && (
+              <div className="flex items-center space-x-2">
+                <button className="icon-btn" onClick={() => handleZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
+                <span className="w-12 text-center" onDoubleClick={() => handleZoom(1)} title="双击重置">{Math.round(zoom * 100)}%</span>
+                <button className="icon-btn" onClick={() => handleZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
+              </div>
+            )}
           </footer>
         </main>
 

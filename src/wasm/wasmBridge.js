@@ -78,24 +78,6 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
         matrix.delete();
         break;
       }
-      case 'resize': {
-        let { width, height } = params;
-        if (!width && !height) {
-          dst = src.clone();
-          break;
-        }
-        
-        const aspectRatio = src.cols / src.rows;
-        if (width && !height) {
-          height = Math.round(width / aspectRatio);
-        } else if (height && !width) {
-          width = Math.round(height * aspectRatio);
-        }
-
-        dst = new self.cv.Mat();
-        self.cv.resize(src, dst, new self.cv.Size(width, height), 0, 0, self.cv.INTER_AREA);
-        break;
-      }
       case 'flip': {
         const { mode } = params;
         dst = new self.cv.Mat();
