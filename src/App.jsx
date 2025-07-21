@@ -204,7 +204,11 @@ function App() {
     console.log('安全裁剪区域:', safeArea);
     
     try {
+      // 恢复原始图像（没有绿色边框的图像）
       const ctx = canvas.getContext('2d');
+      if (originalImageRef.current) {
+        ctx.putImageData(originalImageRef.current, 0, 0);
+      }
       
       // 创建临时画布来处理裁剪
       const tempCanvas = document.createElement('canvas');
@@ -359,7 +363,7 @@ function App() {
       // 将临时画布上的遮罩绘制到主画布上
       ctx.drawImage(tempCanvas, 0, 0);
       
-      // 绘制裁剪区域边框
+      // 绘制裁剪区域边框 - 只在预览时显示，不影响最终裁剪结果
       ctx.strokeStyle = '#00ff00';
       ctx.lineWidth = 2;
       ctx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
