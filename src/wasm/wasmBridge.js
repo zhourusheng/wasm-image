@@ -3,7 +3,8 @@
 
 let opencvReady = false;
 
-export async function initWasm() {
+// 在 classic worker 中, 我们需要将函数附加到 self 全局对象
+self.wasmInit = async function() {
   if (opencvReady) return;
   
   return new Promise((resolve, reject) => {
@@ -29,8 +30,9 @@ export async function initWasm() {
   });
 }
 
-export async function processImage(imageData, op, params) {
-  await initWasm();
+// 修改函数以接收 ctx 并直接渲染，而不是返回 ImageData
+self.wasmProcessImage = async function(imageData, op, params, ctx) {
+  await self.wasmInit();
   
   // 创建 OpenCV Mat 对象
   const src = self.cv.matFromImageData(imageData);
@@ -40,8 +42,19 @@ export async function processImage(imageData, op, params) {
     switch (op) {
       case 'crop': {
         const { x, y, width, height } = params;
-        const rect = new self.cv.Rect(x, y, width, height);
-        dst = src.roi(rect);
+        // 添加一个健壮性检查，确保裁剪参数有效
+        if (x >= 0 && y >= 0 && width > 0 && height > 0 && x + width <= src.cols && y + height <= src.rows) {
+          const rect = new self.cv.Rect(x, y, width, height);
+          const roi = src.roi(rect);
+          // 关键修复：使用 copyTo 将 ROI 复制到一个新的 Mat 中
+          dst = new self.cv.Mat();
+          roi.copyTo(dst);
+          roi.delete(); // 清理临时的 ROI header
+        } else {
+          // 如果裁剪参数无效，则返回原始图像，避免崩溃
+          console.error('无效的裁剪参数，已回退到原始图像。', params);
+          dst = src.clone();
+        }
         break;
       }
       case 'rotate': {
@@ -142,22 +155,20 @@ export async function processImage(imageData, op, params) {
         break;
     }
     
-    // 转换回 ImageData
-    // 使用 OffscreenCanvas 在 Web Worker 中工作
-    const canvas = new OffscreenCanvas(dst.cols, dst.rows);
-    const ctx = canvas.getContext('2d');
-    
-    // 创建临时对象来传递给 imshow
-    const tempCanvas = {
-      width: dst.cols,
-      height: dst.rows,
-      ctx: ctx,
-      getContext: () => ctx
-    };
-    self.cv.imshow(tempCanvas, dst);
-    const result = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    
-    return result;
+    // 使用传入的 OffscreenCanvas Context 直接渲染，不再返回数据
+    const targetCanvas = ctx.canvas;
+    targetCanvas.width = dst.cols;
+    targetCanvas.height = dst.rows;
+
+    // 解决方案：由于 worker 中没有 HTMLCanvasElement，我们不使用 cv.imshow(canvas, mat)
+    // 而是创建一个 ImageData，用 mat 的数据填充它，然后用 putImageData 渲染
+    const imageData = ctx.createImageData(dst.cols, dst.rows);
+    imageData.data.set(new Uint8ClampedArray(dst.data, dst.cols, dst.rows));
+    ctx.putImageData(imageData, 0, 0);
+
+    // 将 ImageData 返回，以便 worker 可以将其发送回主线程用于历史记录
+    return imageData;
+
   } catch (error) {
     console.error('OpenCV 处理错误:', error);
     throw new Error(`处理图像时出错: ${error.message}`);

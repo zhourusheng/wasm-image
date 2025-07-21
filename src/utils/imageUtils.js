@@ -37,6 +37,20 @@ export const drawImageToCanvas = (image, canvas) => {
     return ctx.getImageData(0, 0, image.width, image.height);
 };
 
+/**
+ * 从图片元素中提取 ImageData，不修改任何现有的 canvas
+ * @param {HTMLImageElement} image - 要从中提取数据的图片
+ * @returns {ImageData}
+ */
+export const getImageDataFromImage = (image) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0, image.width, image.height);
+    return ctx.getImageData(0, 0, image.width, image.height);
+};
+
 
 /**
  * 导出 Canvas 内容为图片文件

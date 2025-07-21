@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X
 } from 'lucide-react';
-import { loadImageFromFile, drawImageToCanvas, exportImage } from './utils/imageUtils';
+import { loadImageFromFile, getImageDataFromImage, exportImage } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
 
 function App() {
@@ -13,6 +13,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
+  const cropCanvasRef = useRef(null); // 新增：用于裁剪的覆盖层 Canvas
   const fileInputRef = useRef(null);
   const historyManager = useRef(new HistoryManager()).current;
   // 移除 cropBitmapRef，使用更简单的方法
@@ -21,96 +22,105 @@ function App() {
   // New: worker instance
   const imageWorker = useRef(null);
   const [opencvLoaded, setOpencvLoaded] = useState(false);
+  const [workerReady, setWorkerReady] = useState(false); // 新增：跟踪 worker 是否准备好接收任务
   const [loading, setLoading] = useState(false);
   
   // A simple way to trigger re-render
   const [, setTick] = useState(0);
   const forceUpdate = () => setTick(tick => tick + 1);
 
-  useEffect(() => {
-    // create worker
-    imageWorker.current = new Worker(new URL('./workers/imageWorker.js', import.meta.url));
-    
-    imageWorker.current.onmessage = (e) => {
-        const { type, payload } = e.data;
-        if (type === 'opencv-loaded') {
-            setOpencvLoaded(true);
-            console.log("OpenCV 已在 worker 中加载。");
-        } else if (type === 'image-processed') {
-            console.log(`收到处理后的图像数据: ${payload.imageData.width} x ${payload.imageData.height}`);
-            updateCanvasWithState(payload.imageData);
-            historyManager.add(payload.imageData);
-            forceUpdate();
-            setLoading(false);
-        } else if (type === 'error') {
-            console.error("来自 worker 的错误:", payload);
-            alert("图像处理期间发生错误： " + payload);
-            setLoading(false);
-        }
-    };
-    
-    return () => imageWorker.current && imageWorker.current.terminate();
-  }, []);
-
-  const updateCanvasWithState = (imageData) => {
-    if (imageData && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      
-      console.log(`更新画布: ${imageData.width} x ${imageData.height}`);
-      
-      // 确保画布尺寸与图像数据匹配
-      canvasRef.current.width = imageData.width;
-      canvasRef.current.height = imageData.height;
-      
-      try {
-        ctx.putImageData(imageData, 0, 0);
-        setImageSize({ width: imageData.width, height: imageData.height });
-      } catch (e) {
-        console.error('更新画布失败:', e);
-        alert('更新画布失败: ' + e.message);
-      }
-    } else {
-      console.warn('无法更新画布: 图像数据或画布引用无效');
-    }
-  };
-  
   // Generic function to handle image editing
+  // 将此函数定义移到所有调用它的函数之前
   const processEdit = useCallback((op, params = {}) => {
-    if (!canvasRef.current || !opencvLoaded) {
-        alert("OpenCV 尚未准备好。");
+    if (!canvasRef.current || !workerReady) {
+        alert("Worker 尚未准备好。");
         return;
     }
     setLoading(true);
-    const ctx = canvasRef.current.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
-    
-    console.log(`开始处理图像操作: ${op}`, params);
-    console.log(`源图像尺寸: ${imageData.width} x ${imageData.height}`);
-    
-    imageWorker.current.postMessage({ type: 'image-process', payload: { imageData, action: op, params } });
-  }, [opencvLoaded]);
 
+    // 获取当前状态用于处理
+    const currentImageData = historyManager.getCurrentState();
+    if (!currentImageData) {
+        alert("没有可用的图像数据。");
+        setLoading(false);
+        return;
+    }
+
+    console.log(`开始处理图像操作: ${op}`, params);
+    
+    // 发送当前图像数据和操作给 worker
+    imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: currentImageData, action: op, params } });
+    
+  }, [workerReady, historyManager]);
+  
+  // 主 effect，用于 Worker 初始化，仅运行一次
+  useEffect(() => {
+    const worker = new Worker(new URL('./workers/imageWorker.js', import.meta.url));
+    imageWorker.current = worker;
+    
+    worker.onmessage = (e) => {
+        const { type, payload } = e.data;
+        switch (type) {
+            case 'opencv-loaded':
+                setOpencvLoaded(true);
+                console.log("OpenCV 已在 worker 中加载。");
+                if (canvasRef.current) {
+                    // 这一步现在只会执行一次
+                    const offscreen = canvasRef.current.transferControlToOffscreen();
+                    worker.postMessage({ type: 'init', payload: { canvas: offscreen } }, [offscreen]);
+                }
+                break;
+            case 'worker-ready':
+                setWorkerReady(true);
+                console.log("Worker 已准备好处理图像。");
+                break;
+            case 'image-processed':
+                console.log('Worker 完成图像处理');
+                // 现在我们从 worker 接收 imageData 用于历史记录
+                if (payload.imageData) {
+                    setImageSize({ width: payload.imageData.width, height: payload.imageData.height });
+                    historyManager.add(payload.imageData);
+                    forceUpdate(); // 更新撤销/重做按钮状态
+                }
+                setLoading(false);
+                break;
+            case 'error':
+                console.error("来自 worker 的错误:", payload);
+                alert("图像处理期间发生错误： " + payload);
+                setLoading(false);
+                break;
+        }
+    };
+    
+    return () => worker.terminate();
+  }, []); // 空依赖数组确保此 effect 仅在挂载时运行一次
+
+  // 新的 effect，用于处理新图像的加载
+  useEffect(() => {
+    if (image && workerReady) {
+      setLoading(true);
+      const imageData = getImageDataFromImage(image);
+      historyManager.clear();
+      forceUpdate();
+      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData, action: 'original' } });
+    }
+  }, [image, workerReady]);
+
+  // 此处移除了 processEdit 的定义，因为它已被移到前面
 
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     try {
-      setLoading(true);
       const loadedImage = await loadImageFromFile(file);
-      setImage(loadedImage);
-      setImageSize({ width: loadedImage.width, height: loadedImage.height });
-      const imageData = drawImageToCanvas(loadedImage, canvasRef.current);
-      historyManager.clear();
-      historyManager.add(imageData);
-      forceUpdate();
+      // 仅更新 image state，触发上面的 useEffect 来处理后续逻辑
+      setImage(loadedImage); 
     } catch (error) {
       console.error(error);
       alert(error.message);
-    } finally {
-        setLoading(false);
     }
-  }, [historyManager]);
+  }, []);
 
   const handleUploadClick = () => {
     fileInputRef.current.click();
@@ -125,17 +135,23 @@ function App() {
   };
   
   const handleUndo = () => {
+    if (!historyManager.canUndo()) return;
     const prevState = historyManager.undo();
-    if (prevState) {
-      updateCanvasWithState(prevState);
+    if (prevState && workerReady) {
+      setLoading(true);
+      // 将历史状态发送给 worker 进行重绘
+      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: prevState, action: 'original' } });
       forceUpdate();
     }
   };
   
   const handleRedo = () => {
+    if (!historyManager.canRedo()) return;
     const nextState = historyManager.redo();
-    if (nextState) {
-      updateCanvasWithState(nextState);
+    if (nextState && workerReady) {
+      setLoading(true);
+      // 将历史状态发送给 worker 进行重绘
+      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: nextState, action: 'original' } });
       forceUpdate();
     }
   };
@@ -161,132 +177,72 @@ function App() {
     setIsCropMode(newCropMode);
 
     if (newCropMode) {
-      // 进入裁剪模式，保存当前图像状态
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      originalImageRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      setCropArea(null); // 重置裁剪区域
-    } else {
-      // 退出裁剪模式，恢复原始图像
-      setCropArea(null);
-      if (originalImageRef.current) {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        canvas.width = originalImageRef.current.width;
-        canvas.height = originalImageRef.current.height;
-        ctx.putImageData(originalImageRef.current, 0, 0);
-        originalImageRef.current = null;
+      const mainCanvas = canvasRef.current;
+      const cropCanvas = cropCanvasRef.current;
+
+      if (!mainCanvas || !cropCanvas) return;
+
+      const mainCanvasRect = mainCanvas.getBoundingClientRect();
+      const parentRect = mainCanvas.parentElement.getBoundingClientRect();
+
+      // 精确设置裁剪画布的尺寸和位置，使其与主画布完全重合，防止视觉跳动
+      cropCanvas.style.width = `${mainCanvasRect.width}px`;
+      cropCanvas.style.height = `${mainCanvasRect.height}px`;
+      cropCanvas.style.top = `${mainCanvasRect.top - parentRect.top}px`;
+      cropCanvas.style.left = `${mainCanvasRect.left - parentRect.left}px`;
+      
+      // 设置裁剪画布的分辨率并绘制当前图像
+      const currentImageData = historyManager.getCurrentState();
+      if (currentImageData) {
+        cropCanvas.width = currentImageData.width;
+        cropCanvas.height = currentImageData.height;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.putImageData(currentImageData, 0, 0);
       }
+      setCropArea(null); // 重置裁剪区域
     }
   };
 
   const handleCropConfirm = () => {
-    if (!cropArea) {
-      alert('请先选择裁剪区域');
+    if (!cropArea || cropArea.width < 10 || cropArea.height < 10) {
+      alert('请选择一个有效的裁剪区域');
       return;
     }
-    if (cropArea.width < 10 || cropArea.height < 10) {
-      alert('裁剪区域太小');
-      return;
-    }
-    
-    console.log('裁剪区域:', cropArea);
     
     // 确保裁剪区域不超出画布边界
-    const canvas = canvasRef.current;
+    const currentImageData = historyManager.getCurrentState();
+    if (!currentImageData) return;
+
     const safeArea = {
-      x: Math.max(0, Math.min(cropArea.x, canvas.width)),
-      y: Math.max(0, Math.min(cropArea.y, canvas.height)),
-      width: Math.min(cropArea.width, canvas.width - Math.max(0, cropArea.x)),
-      height: Math.min(cropArea.height, canvas.height - Math.max(0, cropArea.y))
+      x: Math.round(Math.max(0, Math.min(cropArea.x, currentImageData.width))),
+      y: Math.round(Math.max(0, Math.min(cropArea.y, currentImageData.height))),
+      width: Math.round(Math.min(cropArea.width, currentImageData.width - Math.max(0, cropArea.x))),
+      height: Math.round(Math.min(cropArea.height, currentImageData.height - Math.max(0, cropArea.y)))
     };
     
-    console.log('安全裁剪区域:', safeArea);
+    // 将裁剪任务发送给 Worker
+    processEdit('crop', safeArea);
     
-    try {
-      // 恢复原始图像（没有绿色边框的图像）
-      const ctx = canvas.getContext('2d');
-      if (originalImageRef.current) {
-        ctx.putImageData(originalImageRef.current, 0, 0);
-      }
-      
-      // 创建临时画布来处理裁剪
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCanvas.width = safeArea.width;
-      tempCanvas.height = safeArea.height;
-      
-      // 将原始图像数据绘制到临时画布
-      tempCtx.drawImage(
-        canvas, 
-        safeArea.x, safeArea.y, safeArea.width, safeArea.height, // 源矩形
-        0, 0, safeArea.width, safeArea.height // 目标矩形
-      );
-      
-      // 获取裁剪后的图像数据
-      const croppedImageData = tempCtx.getImageData(0, 0, safeArea.width, safeArea.height);
-      
-      // 调整原始画布尺寸并绘制裁剪后的图像
-      canvas.width = safeArea.width;
-      canvas.height = safeArea.height;
-      ctx.putImageData(croppedImageData, 0, 0);
-      
-      // 更新图像尺寸状态
-      setImageSize({ width: safeArea.width, height: safeArea.height });
-      
-      // 将裁剪后的图像添加到历史记录
-      historyManager.add(croppedImageData);
-      
-      // 清理并退出裁剪模式
-      setIsCropMode(false);
-      setCropArea(null);
-      originalImageRef.current = null;
-      
-    } catch (e) {
-      console.error('裁剪失败:', e);
-      alert('裁剪操作失败: ' + e.message);
-      
-      // 恢复原始图像
-      if (originalImageRef.current) {
-        const ctx = canvas.getContext('2d');
-        canvas.width = originalImageRef.current.width;
-        canvas.height = originalImageRef.current.height;
-        ctx.putImageData(originalImageRef.current, 0, 0);
-      }
-      
-      setIsCropMode(false);
-      setCropArea(null);
-    }
+    // 退出裁剪模式
+    setIsCropMode(false);
+    setCropArea(null);
   };
 
   const handleCropCancel = () => {
     setIsCropMode(false);
     setCropArea(null);
-    
-    // 恢复原始图像
-    if (originalImageRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      canvas.width = originalImageRef.current.width;
-      canvas.height = originalImageRef.current.height;
-      ctx.putImageData(originalImageRef.current, 0, 0);
-      originalImageRef.current = null;
-    }
   };
 
   const getCanvasCoordinates = (e) => {
-    const canvas = canvasRef.current;
+    const canvas = cropCanvasRef.current; // 使用裁剪画布
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     
-    // 计算鼠标在画布上的实际像素位置
-    // 注意：这里我们需要考虑画布的CSS尺寸和实际像素尺寸之间的比例
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
-    // 将鼠标位置从客户端坐标系转换到画布坐标系
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
     
     return { x, y };
   };
@@ -361,81 +317,37 @@ function App() {
   
   // Draw crop selection overlay
   useEffect(() => {
-    if (!canvasRef.current || !isCropMode) return;
+    const cropCanvas = cropCanvasRef.current;
+    if (!cropCanvas || !isCropMode) return;
     
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
+    const cropCtx = cropCanvas.getContext('2d');
+    const currentImageData = historyManager.getCurrentState();
     
-    // 如果没有选择区域，只需显示原始图像
-    if (!cropArea) {
-      if (originalImageRef.current) {
-        ctx.putImageData(originalImageRef.current, 0, 0);
-      }
-      return;
+    if (!currentImageData) return;
+
+    // 清除并重绘原始图像到裁剪画布
+    cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+    cropCanvas.width = currentImageData.width;
+    cropCanvas.height = currentImageData.height;
+    cropCtx.putImageData(currentImageData, 0, 0);
+
+    if (!cropArea) return; // 如果没有裁剪区域，就只显示图像
+
+    // 绘制半透明遮罩
+    cropCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+    
+    // 清除裁剪区域的遮罩
+    if (cropArea.width > 0 && cropArea.height > 0) {
+      cropCtx.clearRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
     }
     
-    // 重新绘制原始图像
-    if (originalImageRef.current) {
-      // 先清除画布
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // 绘制原始图像
-      ctx.putImageData(originalImageRef.current, 0, 0);
-      
-      // 使用临时画布来创建裁剪预览效果
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      const tempCtx = tempCanvas.getContext('2d');
-      
-      // 在临时画布上绘制半透明遮罩
-      tempCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-      
-      // 计算裁剪区域与画布的交集（用于显示）
-      const visibleArea = {
-        x: Math.max(0, Math.min(cropArea.x, canvas.width)),
-        y: Math.max(0, Math.min(cropArea.y, canvas.height)),
-        width: Math.min(cropArea.width, canvas.width - Math.max(0, cropArea.x)),
-        height: Math.min(cropArea.height, canvas.height - Math.max(0, cropArea.y))
-      };
-      
-      // 只有当有可见区域时才清除遮罩
-      if (visibleArea.width > 0 && visibleArea.height > 0) {
-        // 在临时画布上清除裁剪区域
-        tempCtx.clearRect(visibleArea.x, visibleArea.y, visibleArea.width, visibleArea.height);
-      }
-      
-      // 将临时画布上的遮罩绘制到主画布上
-      ctx.drawImage(tempCanvas, 0, 0);
-      
-      // 绘制裁剪区域边框 - 只在预览时显示，不影响最终裁剪结果
-      ctx.strokeStyle = '#00ff00';
-      ctx.lineWidth = 2;
-      
-      // 修复边框绘制问题，确保四个边框都能正确显示
-      // 使用四条线段分别绘制四个边框，而不是使用 strokeRect
-      const x = Math.floor(cropArea.x) + 0.5; // 加0.5使线条居中在像素上
-      const y = Math.floor(cropArea.y) + 0.5;
-      const width = Math.floor(cropArea.width);
-      const height = Math.floor(cropArea.height);
-      
-      ctx.beginPath();
-      // 上边框
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + width, y);
-      // 右边框
-      ctx.moveTo(x + width, y);
-      ctx.lineTo(x + width, y + height);
-      // 下边框
-      ctx.moveTo(x + width, y + height);
-      ctx.lineTo(x, y + height);
-      // 左边框
-      ctx.moveTo(x, y + height);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
+    // 绘制裁剪边框
+    cropCtx.strokeStyle = '#00ff00';
+    cropCtx.lineWidth = 2;
+    cropCtx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
     
-  }, [cropArea, isCropMode]);
+  }, [cropArea, isCropMode, historyManager]);
   
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
@@ -516,7 +428,7 @@ function App() {
               </div>
             )}
             <div className='text-sm text-gray-500'>
-                {loading ? "处理中..." : (opencvLoaded ? "OpenCV 已就绪" : "正在加载 OpenCV...")}
+                {loading ? "处理中..." : (workerReady ? "Worker 已就绪" : (opencvLoaded ? "正在初始化Canvas..." : "正在加载 OpenCV..."))}
             </div>
           </div>
 
@@ -525,7 +437,12 @@ function App() {
             <canvas 
               id="canvas" 
               ref={canvasRef} 
-              className={`max-w-full max-h-full bg-white dark:bg-gray-700 shadow-lg rounded-md ${!image ? 'hidden' : ''} ${isCropMode ? 'cursor-crosshair' : ''}`}
+              className={`max-w-full max-h-full bg-white dark:bg-gray-700 shadow-lg rounded-md ${!image ? 'hidden' : ''}`}
+            ></canvas>
+            <canvas
+              id="crop-canvas"
+              ref={cropCanvasRef}
+              className={`absolute ${!isCropMode ? 'hidden' : 'cursor-crosshair'}`}
               onMouseDown={handleCanvasMouseDown}
               onMouseMove={handleCanvasMouseMove}
               onMouseUp={handleCanvasMouseUp}
