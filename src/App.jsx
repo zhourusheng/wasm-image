@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Scaling, Copy
+  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Scaling, Copy, Wand2, Palette
 } from 'lucide-react';
 import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
@@ -29,6 +29,10 @@ function App() {
   const [toolParams, setToolParams] = useState({});
   const [stagedImage, setStagedImage] = useState(null); // 用于暂存进入工具调整前的图像状态
 
+  // 新增：控制画布渲染后显示，避免白框闪烁
+  const [isCanvasRendered, setIsCanvasRendered] = useState(false);
+  const loaderTimeoutRef = useRef(null); // 新增：用于延迟显示加载动画
+
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
   const forceUpdate = () => setTick(tick => tick + 1);
@@ -39,12 +43,22 @@ function App() {
         alert("Worker 尚未准备好。");
         return;
     }
-    setLoading(true);
+    
+    clearTimeout(loaderTimeoutRef.current);
+    if (!isPreview) {
+      setLoading(true);
+    } else {
+      // 仅当操作耗时较长时才显示加载动画，以避免预览时闪烁
+      loaderTimeoutRef.current = setTimeout(() => {
+        setLoading(true);
+      }, 200);
+    }
 
     // 预览时基于暂存的图像，否则基于历史记录的当前状态
     const baseImage = isPreview && stagedImage ? stagedImage : historyManager.getCurrentState();
     if (!baseImage) {
         alert("没有可用的图像数据。");
+        clearTimeout(loaderTimeoutRef.current);
         setLoading(false);
         return;
     }
@@ -78,31 +92,38 @@ function App() {
                 break;
             case 'image-processed':
                 console.log('Worker 完成图像处理');
+                clearTimeout(loaderTimeoutRef.current);
                 if (payload.imageData) {
                     setImageSize({ width: payload.imageData.width, height: payload.imageData.height });
                     // 仅当不是历史导航/预览时才添加到历史记录
                     if (!payload.isHistoryNavigation) {
                         historyManager.add(payload.imageData);
                     }
+                    setIsCanvasRendered(true); // 渲染完成后，标记画布为可显示
                     forceUpdate(); // 更新撤销/重做按钮状态
                 }
                 setLoading(false);
                 break;
             case 'error':
                 console.error("来自 worker 的错误:", payload);
+                clearTimeout(loaderTimeoutRef.current);
                 alert("图像处理期间发生错误： " + payload);
                 setLoading(false);
                 break;
         }
     };
     
-    return () => worker.terminate();
+    return () => {
+      clearTimeout(loaderTimeoutRef.current);
+      worker.terminate()
+    };
   }, []); // 空依赖数组确保此 effect 仅在挂载时运行一次
 
   // 用于处理新图像加载的 effect
   useEffect(() => {
     if (image && workerReady) {
       setLoading(true);
+      setIsCanvasRendered(false); // 加载新图片时，先隐藏画布
       const imageData = getImageDataFromImage(image);
       historyManager.clear();
       forceUpdate();
@@ -199,6 +220,8 @@ function App() {
   };
   
   const handleCancelTool = () => {
+    clearTimeout(loaderTimeoutRef.current);
+    setLoading(false);
     // 恢复到未应用工具前的状态
     if (stagedImage) {
       imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: stagedImage, action: 'original', isHistoryNavigation: true } });
@@ -456,6 +479,29 @@ function App() {
               </div>
             </div>
           );
+        case 'colorBalance':
+          return (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="red" className="text-sm text-red-500">红色</label>
+                <input id="red" type="range" min="-100" max="100" step="1" value={toolParams.red || 0}
+                  onChange={(e) => handleParamsChange({ ...toolParams, red: parseInt(e.target.value, 10) })}/>
+                <div className="text-center text-sm">{toolParams.red || 0}</div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="green" className="text-sm text-green-500">绿色</label>
+                <input id="green" type="range" min="-100" max="100" step="1" value={toolParams.green || 0}
+                  onChange={(e) => handleParamsChange({ ...toolParams, green: parseInt(e.target.value, 10) })}/>
+                <div className="text-center text-sm">{toolParams.green || 0}</div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="blue" className="text-sm text-blue-500">蓝色</label>
+                <input id="blue" type="range" min="-100" max="100" step="1" value={toolParams.blue || 0}
+                  onChange={(e) => handleParamsChange({ ...toolParams, blue: parseInt(e.target.value, 10) })}/>
+                <div className="text-center text-sm">{toolParams.blue || 0}</div>
+              </div>
+            </div>
+          );
         default:
           return <p className="text-sm text-gray-500">该功能无参数可调。</p>;
       }
@@ -505,36 +551,40 @@ function App() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧工具栏 */}
-        <aside className="w-16 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-2">
-           <button className="icon-btn" onClick={() => handleToolActivate('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={24} /></button>
-           <button className="icon-btn" onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
-           <button className="icon-btn" onClick={() => handleToolActivate('canny')} disabled={!image || loading} title="边缘检测">C</button>
-           <button className="icon-btn" onClick={() => handleToolActivate('threshold')} disabled={!image || loading} title="阈值">T</button>
-           <button className="icon-btn" onClick={() => handleToolActivate('brightness', { delta: 0 })} disabled={!image || loading} title="亮度"><Sun size={24} /></button>
-           <button className="icon-btn" onClick={() => handleToolActivate('contrast', { factor: 1 })} disabled={!image || loading} title="对比度"><Contrast size={24} /></button>
-           <button className="icon-btn" onClick={() => handleToolActivate('saturation', { factor: 1 })} disabled={!image || loading} title="饱和度"><Droplets size={24} /></button>
-           <button className="icon-btn" onClick={() => handleToolActivate('resize', { width: imageSize.width, height: imageSize.height })} disabled={!image || loading} title="缩放"><Scaling size={24} /></button>
-           <button 
-            className={`icon-btn ${isCropMode ? 'active' : ''}`}
-            onClick={handleCropModeToggle}
-            disabled={!image || loading}
-            title="裁剪"
-           >
-            <Crop size={24} />
-          </button>
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-700 w-full flex flex-col items-center space-y-2">
-             <button className="icon-btn" onClick={handleRotateCw} disabled={!image || loading} title="顺时针旋转">
-              <RotateCw size={24} />
-            </button>
-            <button className="icon-btn" onClick={handleRotateCcw} disabled={!image || loading} title="逆时针旋转">
-              <RotateCcw size={24} />
-            </button>
-            <button className="icon-btn" onClick={handleFlipH} disabled={!image || loading} title="水平翻转">
-              <FlipHorizontal size={24} />
-            </button>
-             <button className="icon-btn" onClick={handleFlipV} disabled={!image || loading} title="垂直翻转">
-              <FlipVertical size={24} />
-            </button>
+        <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-4 text-xs">
+          {/* 调整 */}
+          <div className="flex flex-col items-center space-y-1 w-full">
+            <span className="font-medium text-gray-500">调整</span>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('brightness', { delta: 0 })} disabled={!image || loading} title="亮度"><Sun size={20} /></button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('contrast', { factor: 1 })} disabled={!image || loading} title="对比度"><Contrast size={20} /></button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('saturation', { factor: 1 })} disabled={!image || loading} title="饱和度"><Droplets size={20} /></button>
+             <button className="icon-btn-group" onClick={() => handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })} disabled={!image || loading} title="色彩平衡"><Palette size={20} /></button>
+          </div>
+          
+          <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+          {/* 效果 */}
+          <div className="flex flex-col items-center space-y-1 w-full">
+            <span className="font-medium text-gray-500">效果</span>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('canny')} disabled={!image || loading} title="边缘检测">C</button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('threshold')} disabled={!image || loading} title="阈值">T</button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('sepia')} disabled={!image || loading} title="复古">S</button>
+          </div>
+
+          <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+          {/* 变换 */}
+          <div className="flex flex-col items-center space-y-1 w-full">
+            <span className="font-medium text-gray-500">变换</span>
+            <button className="icon-btn-group" onClick={handleCropModeToggle} disabled={!image || loading} title="裁剪"><Crop size={20} /></button>
+            <button className="icon-btn-group" onClick={() => handleToolActivate('resize', { width: imageSize.width, height: imageSize.height })} disabled={!image || loading} title="缩放"><Scaling size={20} /></button>
+            <button className="icon-btn-group" onClick={handleRotateCw} disabled={!image || loading} title="顺时针旋转"><RotateCw size={20} /></button>
+            <button className="icon-btn-group" onClick={handleRotateCcw} disabled={!image || loading} title="逆时针旋转"><RotateCcw size={20} /></button>
+            <button className="icon-btn-group" onClick={handleFlipH} disabled={!image || loading} title="水平翻转"><FlipHorizontal size={20} /></button>
+            <button className="icon-btn-group" onClick={handleFlipV} disabled={!image || loading} title="垂直翻转"><FlipVertical size={20} /></button>
           </div>
         </aside>
 
@@ -567,10 +617,15 @@ function App() {
 
           {/* 画布区域 */}
           <div className="flex-1 flex items-center justify-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative">
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-gray-800/50 backdrop-blur-sm z-20">
+                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+              </div>
+            )}
             <canvas 
               id="canvas" 
               ref={canvasRef} 
-              className={`max-w-full max-h-full bg-white dark:bg-gray-700 shadow-lg rounded-md ${!image ? 'hidden' : ''}`}
+              className={`max-w-full max-h-full shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
             ></canvas>
             <canvas
               id="crop-canvas"

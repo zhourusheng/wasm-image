@@ -133,6 +133,49 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
         satChannel.delete(); // 虽然satChannel是指向channels的，但显式删除更安全
         break;
       }
+      case 'emboss': {
+        dst = new self.cv.Mat();
+        const kernel = self.cv.matFromArray(3, 3, self.cv.CV_32F, [-2, -1, 0, -1, 1, 1, 0, 1, 2]);
+        self.cv.filter2D(src, dst, self.cv.CV_8U, kernel, new self.cv.Point(-1, -1), 128);
+        kernel.delete();
+        break;
+      }
+      case 'sepia': {
+        dst = new self.cv.Mat();
+        // 复古效果的转换矩阵
+        const M = self.cv.matFromArray(3, 4, self.cv.CV_32F, [
+          0.272, 0.534, 0.131, 0,
+          0.349, 0.686, 0.168, 0,
+          0.393, 0.769, 0.189, 0,
+        ]);
+        self.cv.transform(src, dst, M);
+        M.delete();
+        // OpenCV的transform可能会改变通道数，确保输出是4通道
+        if (dst.channels() === 3) {
+            self.cv.cvtColor(dst, dst, self.cv.COLOR_RGB2RGBA);
+        }
+        break;
+      }
+      case 'colorBalance': {
+        const { red = 0, green = 0, blue = 0 } = params;
+        dst = new self.cv.Mat();
+        const channels = new self.cv.MatVector();
+        self.cv.split(src, channels);
+
+        // 调整 B, G, R 通道 (OpenCV中顺序是 BGR)
+        const bChannel = channels.get(0);
+        const gChannel = channels.get(1);
+        const rChannel = channels.get(2);
+        
+        self.cv.add(bChannel, new self.cv.Mat(src.rows, src.cols, self.cv.CV_8U, new self.cv.Scalar(blue)), bChannel);
+        self.cv.add(gChannel, new self.cv.Mat(src.rows, src.cols, self.cv.CV_8U, new self.cv.Scalar(green)), gChannel);
+        self.cv.add(rChannel, new self.cv.Mat(src.rows, src.cols, self.cv.CV_8U, new self.cv.Scalar(red)), rChannel);
+
+        self.cv.merge(channels, dst);
+        channels.delete();
+        // bChannel, gChannel, rChannel 只是引用，不需要单独 delete
+        break;
+      }
       case 'blur': {
         const ksize = (params && params.ksize) || 5; // 提供默认值
         // 确保 ksize 是一个奇数
