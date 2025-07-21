@@ -61,8 +61,20 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
         const { angle } = params;
         const center = new self.cv.Point(src.cols / 2, src.rows / 2);
         const matrix = self.cv.getRotationMatrix2D(center, angle, 1.0);
+        
+        // 计算旋转后的边界框
+        const rad = Math.abs(angle) * Math.PI / 180;
+        const sin = Math.abs(Math.sin(rad));
+        const cos = Math.abs(Math.cos(rad));
+        const newWidth = Math.ceil(src.cols * cos + src.rows * sin);
+        const newHeight = Math.ceil(src.cols * sin + src.rows * cos);
+        
+        // 调整旋转矩阵以考虑平移
+        matrix.data64F[2] += (newWidth / 2) - center.x;
+        matrix.data64F[5] += (newHeight / 2) - center.y;
+        
         dst = new self.cv.Mat();
-        self.cv.warpAffine(src, dst, matrix, new self.cv.Size(src.cols, src.rows));
+        self.cv.warpAffine(src, dst, matrix, new self.cv.Size(newWidth, newHeight));
         matrix.delete();
         break;
       }
