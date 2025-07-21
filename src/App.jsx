@@ -201,6 +201,13 @@ function App() {
         alert('请先上传一张图片');
         return;
     }
+
+    // 如果再次点击同一个工具图标，则取消操作
+    if (activeTool === toolName) {
+      handleCancelTool();
+      return;
+    }
+
     setActiveTool(toolName);
     setToolParams(defaultParams);
     setStagedImage(historyManager.getCurrentState());
@@ -257,13 +264,14 @@ function App() {
     if (newCropMode) {
       const mainCanvas = canvasRef.current;
       const cropCanvas = cropCanvasRef.current;
-
       if (!mainCanvas || !cropCanvas) return;
 
+      // 关键修复：获取主画布（可能被缩放）的视觉尺寸和位置
       const mainCanvasRect = mainCanvas.getBoundingClientRect();
-      const parentRect = mainCanvas.parentElement.getBoundingClientRect();
+      // 获取裁剪画布的父容器（即画布区域的根div）的位置
+      const parentRect = cropCanvas.parentElement.getBoundingClientRect();
 
-      // 精确设置裁剪画布的尺寸和位置，使其与主画布完全重合，防止视觉跳动
+      // 将裁剪画布的CSS样式设置为与主画布的视觉大小和位置完全一致
       cropCanvas.style.width = `${mainCanvasRect.width}px`;
       cropCanvas.style.height = `${mainCanvasRect.height}px`;
       cropCanvas.style.top = `${mainCanvasRect.top - parentRect.top}px`;
@@ -545,10 +553,10 @@ function App() {
           {/* 调整 */}
           <div className="flex flex-col items-center space-y-1 w-full">
             <span className="font-medium text-gray-500">调整</span>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('brightness', { delta: 0 })} disabled={!image || loading} title="亮度"><Sun size={20} /></button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('contrast', { factor: 1 })} disabled={!image || loading} title="对比度"><Contrast size={20} /></button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('saturation', { factor: 1 })} disabled={!image || loading} title="饱和度"><Droplets size={20} /></button>
-             <button className="icon-btn-group" onClick={() => handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })} disabled={!image || loading} title="色彩平衡"><Palette size={20} /></button>
+            <button className={`icon-btn-group ${activeTool === 'brightness' ? 'active' : ''}`} onClick={() => handleToolActivate('brightness', { delta: 0 })} disabled={!image || loading} title="亮度"><Sun size={20} /></button>
+            <button className={`icon-btn-group ${activeTool === 'contrast' ? 'active' : ''}`} onClick={() => handleToolActivate('contrast', { factor: 1 })} disabled={!image || loading} title="对比度"><Contrast size={20} /></button>
+            <button className={`icon-btn-group ${activeTool === 'saturation' ? 'active' : ''}`} onClick={() => handleToolActivate('saturation', { factor: 1 })} disabled={!image || loading} title="饱和度"><Droplets size={20} /></button>
+             <button className={`icon-btn-group ${activeTool === 'colorBalance' ? 'active' : ''}`} onClick={() => handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })} disabled={!image || loading} title="色彩平衡"><Palette size={20} /></button>
           </div>
           
           <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
@@ -557,7 +565,7 @@ function App() {
           <div className="flex flex-col items-center space-y-1 w-full">
             <span className="font-medium text-gray-500">效果</span>
             <button className="icon-btn-group" onClick={() => processEdit('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
-            <button className="icon-btn-group" onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
+            <button className={`icon-btn-group ${activeTool === 'blur' ? 'active' : ''}`} onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
             <button className="icon-btn-group" onClick={() => processEdit('canny')} disabled={!image || loading} title="边缘检测">C</button>
             <button className="icon-btn-group" onClick={() => processEdit('threshold')} disabled={!image || loading} title="阈值">T</button>
             <button className="icon-btn-group" onClick={() => processEdit('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
@@ -617,16 +625,16 @@ function App() {
                 ref={canvasRef} 
                 className={`max-w-full max-h-full shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
               ></canvas>
-              <canvas
-                id="crop-canvas"
-                ref={cropCanvasRef}
-                className={`absolute top-0 left-0 ${!isCropMode ? 'hidden' : 'cursor-crosshair'}`}
-                onMouseDown={handleCanvasMouseDown}
-                onMouseMove={handleCanvasMouseMove}
-                onMouseUp={handleCanvasMouseUp}
-                onMouseLeave={handleCanvasMouseUp}
-              ></canvas>
             </div>
+            <canvas
+              id="crop-canvas"
+              ref={cropCanvasRef}
+              className={`absolute ${!isCropMode ? 'hidden' : 'cursor-crosshair'}`}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseUp={handleCanvasMouseUp}
+              onMouseLeave={handleCanvasMouseUp}
+            ></canvas>
             {!image && (
               <div className="absolute flex items-center justify-center inset-0">
                 <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
