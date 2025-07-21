@@ -6,13 +6,13 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
-    /* ... other color variables */
+    /* ... 其他颜色变量 */
   }
 
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
-    /* ... other dark mode color variables */
+    /* ... 其他暗黑模式颜色变量 */
   }
   
   body {
@@ -32,7 +32,7 @@
   }
 }
 
-/* Custom scrollbar for webkit browsers */
+/* 针对 webkit 浏览器的自定义滚动条 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -48,7 +48,7 @@
   background: #55555588;
 }
 
-/* Custom range input styles */
+/* 自定义范围输入样式 */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;

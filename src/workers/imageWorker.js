@@ -1,26 +1,26 @@
 // src/workers/imageWorker.js
 importScripts('/src/wasm/wasmBridge.js'); // 导入 wasm 图像处理函数
 
-// This is the correct way to load and initialize emscripten modules in a worker.
-// 1. Define the Module object
-// 2. Pre-fetch the wasm binary
-// 3. Import the javascript glue code
+// 这是在 worker 中加载和初始化 emscripten 模块的正确方法。
+// 1. 定义 Module 对象
+// 2. 预取 wasm 二进制文件
+// 3. 导入 javascript 胶水代码
 self.Module = {
-    // Don't run the main loop
+    // 不运行主循环
     noInitialRun: true,
-    // When the runtime is initialized, post a message to the main thread
+    // 当运行时初始化时，向主线程发送消息
     onRuntimeInitialized: () => {
-        // self.cv is the global object that opencv.js creates.
+        // self.cv 是 opencv.js 创建的全局对象。
         postMessage({ type: 'opencv-loaded' });
     },
-    // We will fetch the wasm binary ourselves and place it here
+    // 我们将自己获取 wasm 二进制文件并放在这里
     wasmBinary: null,
 };
 
 let offscreenCanvas = null;
 let ctx = null;
 
-// Fetch the wasm binary and then import the script
+// 获取 wasm 二进制文件，然后导入脚本
 (async () => {
     try {
         const response = await fetch('/js/opencv.wasm');

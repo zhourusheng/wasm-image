@@ -8,7 +8,7 @@ self.wasmInit = async function() {
   if (opencvReady) return;
   
   return new Promise((resolve, reject) => {
-    // Check if cv is already defined
+    // 检查 cv 是否已定义
     if (typeof self.cv !== 'undefined') {
       if (self.cv.Mat) {
         opencvReady = true;
@@ -17,7 +17,7 @@ self.wasmInit = async function() {
       }
     }
     
-    // If cv exists but isn't initialized yet
+    // 如果 cv 存在但尚未初始化
     if (typeof self.cv !== 'undefined') {
       // 等待 OpenCV.js 加载完成
       self.cv['onRuntimeInitialized'] = () => {

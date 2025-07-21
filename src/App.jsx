@@ -13,23 +13,23 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
-  const cropCanvasRef = useRef(null); // 新增：用于裁剪的覆盖层 Canvas
+  const cropCanvasRef = useRef(null); // 用于裁剪的覆盖层 Canvas
   const fileInputRef = useRef(null);
   const historyManager = useRef(new HistoryManager()).current;
   // 移除 cropBitmapRef，使用更简单的方法
   const originalImageRef = useRef(null);
 
-  // New: worker instance
+  // worker 实例
   const imageWorker = useRef(null);
   const [opencvLoaded, setOpencvLoaded] = useState(false);
-  const [workerReady, setWorkerReady] = useState(false); // 新增：跟踪 worker 是否准备好接收任务
+  const [workerReady, setWorkerReady] = useState(false); // 跟踪 worker 是否准备好接收任务
   const [loading, setLoading] = useState(false);
   
-  // A simple way to trigger re-render
+  // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
   const forceUpdate = () => setTick(tick => tick + 1);
 
-  // Generic function to handle image editing
+  // 通用图像编辑处理函数
   // 将此函数定义移到所有调用它的函数之前
   const processEdit = useCallback((op, params = {}) => {
     if (!canvasRef.current || !workerReady) {
@@ -95,7 +95,7 @@ function App() {
     return () => worker.terminate();
   }, []); // 空依赖数组确保此 effect 仅在挂载时运行一次
 
-  // 新的 effect，用于处理新图像的加载
+  // 用于处理新图像加载的 effect
   useEffect(() => {
     if (image && workerReady) {
       setLoading(true);
@@ -156,7 +156,7 @@ function App() {
     }
   };
 
-  // --- All tool functions now use processEdit ---
+  // --- 所有工具函数现在都使用 processEdit ---
   const handleRotateCw = () => processEdit('rotate', { angle: 90 });
   const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
   const handleFlipH = () => processEdit('flip', { mode: 0 });
@@ -167,7 +167,7 @@ function App() {
   const handleThreshold = () => processEdit('threshold');
 
 
-  // Crop related functions
+  // 裁剪相关函数
   const handleCropModeToggle = () => {
     if (!image) {
       alert('请先上传一张图片');
@@ -315,7 +315,7 @@ function App() {
     setIsDragging(false);
   };
   
-  // Draw crop selection overlay
+  // 绘制裁剪选区覆盖层
   useEffect(() => {
     const cropCanvas = cropCanvasRef.current;
     if (!cropCanvas || !isCropMode) return;
@@ -351,7 +351,7 @@ function App() {
   
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">
-      {/* Header */}
+      {/* 头部 */}
       <header className="flex items-center justify-between px-4 h-14 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10">
         <div className="flex items-center space-x-2">
           <ImagePlay size={28} className="text-blue-500" />
@@ -375,7 +375,7 @@ function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Toolbar */}
+        {/* 左侧工具栏 */}
         <aside className="w-16 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-2">
            <button className="icon-btn" onClick={handleGrayscale} disabled={!image || loading} title="灰度"><SlidersHorizontal size={24} /></button>
            <button className="icon-btn" onClick={handleBlur} disabled={!image || loading} title="模糊">B</button>
@@ -405,9 +405,9 @@ function App() {
           </div>
         </aside>
 
-        {/* Main Content */}
+        {/* 主内容 */}
         <main className="flex-1 flex flex-col">
-          {/* Top bar for main content */}
+          {/* 主内容顶部栏 */}
           <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center space-x-2">
               <button className="icon-btn" onClick={handleUndo} disabled={!historyManager.canUndo() || loading} title="撤销">
@@ -432,7 +432,7 @@ function App() {
             </div>
           </div>
 
-          {/* Canvas Area */}
+          {/* 画布区域 */}
           <div className="flex-1 flex items-center justify-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative">
             <canvas 
               id="canvas" 
@@ -461,7 +461,7 @@ function App() {
             )}
           </div>
           
-          {/* Footer */}
+          {/* 底部 */}
           <footer className="h-10 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm">
             <div>
               <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
