@@ -291,9 +291,33 @@ function App() {
     return { x, y };
   };
 
+  // 添加一个新的状态来跟踪拖动模式
+  const [dragMode, setDragMode] = useState('create'); // 'create', 'move'
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
   const handleCanvasMouseDown = (e) => {
     if (!isCropMode) return;
+    
     const coords = getCanvasCoordinates(e);
+    
+    // 检查是否点击了已存在的裁剪区域
+    if (cropArea) {
+      // 检查点击是否在裁剪区域内
+      if (coords.x >= cropArea.x && coords.x <= cropArea.x + cropArea.width &&
+          coords.y >= cropArea.y && coords.y <= cropArea.y + cropArea.height) {
+        // 点击在裁剪区域内，进入移动模式
+        setDragMode('move');
+        setDragOffset({
+          x: coords.x - cropArea.x,
+          y: coords.y - cropArea.y
+        });
+        setIsDragging(true);
+        return;
+      }
+    }
+    
+    // 点击在裁剪区域外或没有裁剪区域，创建新的裁剪区域
+    setDragMode('create');
     setIsDragging(true);
     setDragStart(coords);
     setCropArea({
@@ -306,18 +330,28 @@ function App() {
 
   const handleCanvasMouseMove = (e) => {
     if (!isCropMode || !isDragging) return;
+    
     const coords = getCanvasCoordinates(e);
-    const canvas = canvasRef.current;
-    const clampedX = Math.max(0, Math.min(coords.x, canvas.width));
-    const clampedY = Math.max(0, Math.min(coords.y, canvas.height));
-    const width = clampedX - dragStart.x;
-    const height = clampedY - dragStart.y;
-    setCropArea(prev => ({
-      x: width >= 0 ? dragStart.x : clampedX,
-      y: height >= 0 ? dragStart.y : clampedY,
-      width: Math.abs(width),
-      height: Math.abs(height)
-    }));
+    
+    if (dragMode === 'create') {
+      // 创建或调整裁剪区域
+      const width = coords.x - dragStart.x;
+      const height = coords.y - dragStart.y;
+      
+      setCropArea({
+        x: width >= 0 ? dragStart.x : coords.x,
+        y: height >= 0 ? dragStart.y : coords.y,
+        width: Math.abs(width),
+        height: Math.abs(height)
+      });
+    } else if (dragMode === 'move') {
+      // 移动已存在的裁剪区域
+      setCropArea(prev => ({
+        ...prev,
+        x: coords.x - dragOffset.x,
+        y: coords.y - dragOffset.y
+      }));
+    }
   };
 
   const handleCanvasMouseUp = () => {
@@ -357,8 +391,19 @@ function App() {
       tempCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
       tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
       
-      // 在临时画布上清除裁剪区域
-      tempCtx.clearRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+      // 计算裁剪区域与画布的交集（用于显示）
+      const visibleArea = {
+        x: Math.max(0, Math.min(cropArea.x, canvas.width)),
+        y: Math.max(0, Math.min(cropArea.y, canvas.height)),
+        width: Math.min(cropArea.width, canvas.width - Math.max(0, cropArea.x)),
+        height: Math.min(cropArea.height, canvas.height - Math.max(0, cropArea.y))
+      };
+      
+      // 只有当有可见区域时才清除遮罩
+      if (visibleArea.width > 0 && visibleArea.height > 0) {
+        // 在临时画布上清除裁剪区域
+        tempCtx.clearRect(visibleArea.x, visibleArea.y, visibleArea.width, visibleArea.height);
+      }
       
       // 将临时画布上的遮罩绘制到主画布上
       ctx.drawImage(tempCanvas, 0, 0);
@@ -366,7 +411,28 @@ function App() {
       // 绘制裁剪区域边框 - 只在预览时显示，不影响最终裁剪结果
       ctx.strokeStyle = '#00ff00';
       ctx.lineWidth = 2;
-      ctx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+      
+      // 修复边框绘制问题，确保四个边框都能正确显示
+      // 使用四条线段分别绘制四个边框，而不是使用 strokeRect
+      const x = Math.floor(cropArea.x) + 0.5; // 加0.5使线条居中在像素上
+      const y = Math.floor(cropArea.y) + 0.5;
+      const width = Math.floor(cropArea.width);
+      const height = Math.floor(cropArea.height);
+      
+      ctx.beginPath();
+      // 上边框
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + width, y);
+      // 右边框
+      ctx.moveTo(x + width, y);
+      ctx.lineTo(x + width, y + height);
+      // 下边框
+      ctx.moveTo(x + width, y + height);
+      ctx.lineTo(x, y + height);
+      // 左边框
+      ctx.moveTo(x, y + height);
+      ctx.lineTo(x, y);
+      ctx.stroke();
     }
     
   }, [cropArea, isCropMode]);
