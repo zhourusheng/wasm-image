@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
+import { logPerformanceToConsole } from './utils/performanceLogger';
 
 function App() {
   const [image, setImage] = useState(null);
@@ -95,6 +96,9 @@ function App() {
                 break;
             case 'image-processed':
                 console.log('Worker 完成图像处理');
+                if (payload.perfLog) {
+                    logPerformanceToConsole(payload.perfLog);
+                }
                 clearTimeout(loaderTimeoutRef.current);
                 if (payload.imageData) {
                     setImageSize({ width: payload.imageData.width, height: payload.imageData.height });

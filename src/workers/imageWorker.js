@@ -1,19 +1,51 @@
 // src/workers/imageWorker.js
+
+/**
+ * 一个简单的性能计时器，用于记录多步骤操作的耗时。
+ * （注意：此类直接内联在此文件中，以避免在非模块 Worker 中处理导入/导出的复杂性）
+ */
+class PerformanceTimer {
+  constructor(operationName, metadata = {}) {
+    this.operationName = operationName;
+    this.metadata = metadata;
+    this.steps = [];
+    this.startTime = performance.now();
+    this.lastStepTime = this.startTime;
+    this.step('start');
+  }
+
+  step(stepName) {
+    const now = performance.now();
+    const elapsed = now - this.lastStepTime;
+    this.steps.push({
+      name: stepName,
+      elapsed: parseFloat(elapsed.toFixed(2)),
+    });
+    this.lastStepTime = now;
+  }
+
+  end() {
+    this.step('end');
+    const totalTime = this.lastStepTime - this.startTime;
+    return {
+      operation: this.operationName,
+      metadata: this.metadata,
+      totalTime: parseFloat(totalTime.toFixed(2)),
+      steps: this.steps,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+
 importScripts('/src/wasm/wasmBridge.js'); // 导入 wasm 图像处理函数
 
 // 这是在 worker 中加载和初始化 emscripten 模块的正确方法。
-// 1. 定义 Module 对象
-// 2. 预取 wasm 二进制文件
-// 3. 导入 javascript 胶水代码
 self.Module = {
-    // 不运行主循环
     noInitialRun: true,
-    // 当运行时初始化时，向主线程发送消息
     onRuntimeInitialized: () => {
-        // self.cv 是 opencv.js 创建的全局对象。
         postMessage({ type: 'opencv-loaded' });
     },
-    // 我们将自己获取 wasm 二进制文件并放在这里
     wasmBinary: null,
 };
 
@@ -49,10 +81,26 @@ self.onmessage = async (e) => {
             break;
         case 'image-process':
             if (self.cv && ctx) {
+                 const timer = new PerformanceTimer(payload.action, {
+                    width: payload.imageData.width,
+                    height: payload.imageData.height,
+                });
                 try {
-                    const resultImageData = await self.wasmProcessImage(payload.imageData, payload.action, payload.params, ctx);
-                    // 将包含 ArrayBuffer 的结果发送回主线程，并将其标记为可转移
-                    postMessage({ type: 'image-processed', payload: { imageData: resultImageData, isHistoryNavigation: payload.isHistoryNavigation || false } }, [resultImageData.data.buffer]);
+                    const resultImageData = await self.wasmProcessImage(payload.imageData, payload.action, payload.params, ctx, timer);
+                    timer.step('image_processed_in_worker');
+                    const perfLog = timer.end();
+                    
+                    postMessage(
+                        { 
+                            type: 'image-processed', 
+                            payload: { 
+                                imageData: resultImageData, 
+                                isHistoryNavigation: payload.isHistoryNavigation || false,
+                                perfLog: perfLog,
+                            } 
+                        }, 
+                        [resultImageData.data.buffer]
+                    );
                 } catch (error) {
                     console.error("图像处理时发生错误:", error);
                     postMessage({ type: 'error', payload: error.message });
@@ -66,6 +114,4 @@ self.onmessage = async (e) => {
             }
             break;
     }
-};
-
-// 原始的 processImage 函数已被移除，因为它现在由 wasmBridge.js 提供 
+}; 

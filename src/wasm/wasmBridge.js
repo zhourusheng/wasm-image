@@ -30,13 +30,19 @@ self.wasmInit = async function() {
   });
 }
 
-// 修改函数以接收 ctx 并直接渲染，而不是返回 ImageData
-self.wasmProcessImage = async function(imageData, op, params, ctx) {
+// 修改函数以接收 ctx 和 timer 并直接渲染
+self.wasmProcessImage = async function(imageData, op, params, ctx, timer) {
+  if (!timer) {
+    throw new Error("A PerformanceTimer instance must be provided.");
+  }
+  
   await self.wasmInit();
+  timer.step('wasm_initialized');
   
   // 创建 OpenCV Mat 对象
   const src = self.cv.matFromImageData(imageData);
   let dst;
+  timer.step('mat_from_imagedata');
   
   try {
     switch (op) {
@@ -218,6 +224,7 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
         dst = src.clone();
         break;
     }
+    timer.step(`operation_${op}`);
     
     // 使用传入的 OffscreenCanvas Context 直接渲染，不再返回数据
     const targetCanvas = ctx.canvas;
@@ -226,13 +233,14 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
 
     // 解决方案：由于 worker 中没有 HTMLCanvasElement，我们不使用 cv.imshow(canvas, mat)
     // 而是创建一个 ImageData，用 mat 的数据填充它，然后用 putImageData 渲染
-    const imageData = ctx.createImageData(dst.cols, dst.rows);
+    const resultImageData = ctx.createImageData(dst.cols, dst.rows);
     // 修复：直接从 dst.data 设置数据，之前的参数是错误的
-    imageData.data.set(dst.data);
-    ctx.putImageData(imageData, 0, 0);
+    resultImageData.data.set(dst.data);
+    ctx.putImageData(resultImageData, 0, 0);
+    timer.step('render_to_offscreen');
 
     // 将 ImageData 返回，以便 worker 可以将其发送回主线程用于历史记录
-    return imageData;
+    return resultImageData;
 
   } catch (error) {
     console.error(`OpenCV operation '${op}' failed:`, error);
@@ -245,5 +253,6 @@ self.wasmProcessImage = async function(imageData, op, params, ctx) {
     if (dst && !dst.isDeleted()) {
       dst.delete();
     }
+    timer.step('memory_cleanup');
   }
 } 
