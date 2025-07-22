@@ -1,11 +1,17 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Palette, Copy, Wand2, Eye, FileOutput
+  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Palette, Copy, Wand2, Eye, FileOutput, GripVertical
 } from 'lucide-react';
 import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
 import { logPerformanceToConsole } from './utils/performanceLogger';
 import { compressCanvasImage, formatFileSize } from './utils/filters';
+import {
+  createHorizontalCollage,
+  createVerticalCollage,
+  createGridCollage,
+  loadImagesFromFiles
+} from './utils/imageCollageUtils';
 
 /**
  * 一个简单的性能计时器，用于记录多步骤操作的耗时。
@@ -91,6 +97,9 @@ function App() {
   const [zoom, setZoom] = useState(1); // 当前画布的缩放比例
   const [fitZoom, setFitZoom] = useState(1); // 由程序计算的"最佳适应"缩放比例
   const [userHasZoomed, setUserHasZoomed] = useState(false); // 新增：跟踪用户是否手动缩放过
+
+  // 新增：拼接模式相关状态
+  const [isCollageMode, setIsCollageMode] = useState(false);
 
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
@@ -292,6 +301,47 @@ function App() {
       forceUpdate(); // 立即更新UI状态
     }
   };
+
+  const handleEnterCollageMode = () => {
+    // 如果当前有图片，询问用户是否要将其用作拼接的第一张图
+    if (image) {
+      if (confirm('您想将当前编辑的图片添加到拼接中吗？')) {
+        const currentImageData = historyManager.getCurrentState();
+        // 我们将在进入模式后处理它
+        setIsCollageMode(true);
+        // 通过 useEffect 触发，传递当前图像
+        setTimeout(() => {
+          const collageInputElement = document.getElementById('collage-file-input');
+          if (collageInputElement) {
+            // 这部分有点hacky，理想情况下我们会有更好的状态管理
+            // 但为了简单起见，我们暂时这样做
+            window.initialCollageImage = currentImageData;
+          }
+        }, 0);
+        return;
+      }
+    }
+    setIsCollageMode(true);
+  };
+
+  const handleExitCollageMode = (newImageData) => {
+    setIsCollageMode(false);
+    if (newImageData) {
+      // 将拼接结果设置为新图片
+      const newImage = new Image();
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = newImageData.width;
+      tempCanvas.height = newImageData.height;
+      tempCanvas.getContext('2d').putImageData(newImageData, 0, 0);
+      
+      newImage.onload = () => {
+        setOriginalFileInfo({ size: 0, name: 'collage.png' });
+        setImage(newImage);
+      };
+      newImage.src = tempCanvas.toDataURL();
+    }
+  };
+
 
   const handleCompareStart = () => {
     if (!originalImageRef.current || loading) return;
@@ -669,6 +719,9 @@ function App() {
       cropCanvas.style.top = `${mainCanvasRect.top - parentRect.top}px`;
       cropCanvas.style.left = `${mainCanvasRect.left - parentRect.left}px`;
       
+      // 修复：显示裁剪画布
+      cropCanvas.style.display = 'block';
+      
       // 设置裁剪画布的分辨率并绘制当前图像
       const currentImageData = historyManager.getCurrentState();
       if (currentImageData) {
@@ -678,6 +731,11 @@ function App() {
         cropCtx.putImageData(currentImageData, 0, 0);
       }
       setCropArea(null); // 重置裁剪区域
+    } else {
+      // 修复：退出裁剪模式时隐藏裁剪画布
+      if (cropCanvasRef.current) {
+        cropCanvasRef.current.style.display = 'none';
+      }
     }
   };
 
@@ -704,11 +762,20 @@ function App() {
     // 退出裁剪模式
     setIsCropMode(false);
     setCropArea(null);
+    
+    // 修复：确认裁剪后隐藏裁剪画布
+    if (cropCanvasRef.current) {
+      cropCanvasRef.current.style.display = 'none';
+    }
   };
 
   const handleCropCancel = () => {
     setIsCropMode(false);
     setCropArea(null);
+    // 修复：取消裁剪时隐藏裁剪画布
+    if (cropCanvasRef.current) {
+      cropCanvasRef.current.style.display = 'none';
+    }
   };
 
   const getCanvasCoordinates = (e) => {
@@ -982,6 +1049,9 @@ function App() {
           <button className="icon-btn" onClick={handleCopyClick} title="复制图像">
             <Copy size={20} />
           </button>
+          <button className="icon-btn" onClick={handleEnterCollageMode} disabled={loading} title="图片拼接">
+            <GripVertical size={20} />
+          </button>
           <button className="icon-btn" onClick={handleOpenExportPanel} title="导出图像">
             <FileOutput size={20} />
           </button>
@@ -1027,128 +1097,136 @@ function App() {
           
         </aside>
 
-        {/* 主内容区和底部栏的包装器 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* 主内容 - 关键修复：添加 min-h-0 允许内容区收缩 */}
-          <main className="flex-1 flex flex-col min-h-0">
-            {/* 主内容顶部栏 */}
-            <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-2">
-                <button className="icon-btn" onClick={handleUndo} disabled={!historyManager.canUndo() || loading} title="撤销">
-                  <Undo size={20} />
-                </button>
-                <button className="icon-btn" onClick={handleRedo} disabled={!historyManager.canRedo() || loading} title="重做">
-                  <Redo size={20} />
-                </button>
-                <button className="icon-btn" onClick={handleRevertToOriginal} disabled={!image || loading} title="重置所有操作">
-                  <Trash2 size={20} />
-                </button>
-              </div>
-              {isCropMode && (
-                <div className="flex items-center space-x-2">
-                  <button className="icon-btn text-green-500" onClick={handleCropConfirm} title="确认">
-                    <Check size={20} />
-                  </button>
-                  <button className="icon-btn text-red-500" onClick={handleCropCancel} title="取消">
-                    <X size={20} />
-                  </button>
-                </div>
-              )}
-              <div className='text-sm text-gray-500'>
-                  {loading ? "处理中..." : (workerReady ? "Worker 已就绪" : (opencvLoaded ? "正在初始化Canvas..." : "正在加载 OpenCV..."))}
-              </div>
-            </div>
-
-            {/* 画布区域 */}
-            <div ref={canvasContainerRef} className="flex-1 grid place-items-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative">
-              {loading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-gray-800/50 backdrop-blur-sm z-20">
-                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-                </div>
-              )}
-              <canvas 
-                id="canvas" 
-                ref={canvasRef} 
-                className={`shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
-                style={{
-                  width: `${imageSize.width * zoom}px`,
-                  height: `${imageSize.height * zoom}px`,
-                }}
-              ></canvas>
-              <canvas
-                id="crop-canvas"
-                className={`absolute hidden`}
-                onMouseDown={handleCanvasMouseDown}
-                onMouseMove={handleCanvasMouseMove}
-                onMouseUp={handleCanvasMouseUp}
-                onMouseLeave={handleCanvasMouseUp}
-              ></canvas>
-              {!image && (
-                <div className="absolute flex items-center justify-center inset-0">
-                  <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
-                    <h2 className="text-2xl font-semibold mb-2">未加载图像</h2>
-                    <p className="text-gray-500 dark:text-gray-400">上传一张图片开始编辑</p>
-                    <button onClick={handleUploadClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
-                      上传图片
+        {isCollageMode ? (
+          <CollageModePanel onExit={handleExitCollageMode} />
+        ) : (
+          <>
+            {/* 主内容区和底部栏的包装器 */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* 主内容 - 关键修复：添加 min-h-0 允许内容区收缩 */}
+              <main className="flex-1 flex flex-col min-h-0">
+                {/* 主内容顶部栏 */}
+                <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center space-x-2">
+                    <button className="icon-btn" onClick={handleUndo} disabled={!historyManager.canUndo() || loading} title="撤销">
+                      <Undo size={20} />
+                    </button>
+                    <button className="icon-btn" onClick={handleRedo} disabled={!historyManager.canRedo() || loading} title="重做">
+                      <Redo size={20} />
+                    </button>
+                    <button className="icon-btn" onClick={handleRevertToOriginal} disabled={!image || loading} title="重置所有操作">
+                      <Trash2 size={20} />
                     </button>
                   </div>
+                  {isCropMode && (
+                    <div className="flex items-center space-x-2">
+                      <button className="icon-btn text-green-500" onClick={handleCropConfirm} title="确认">
+                        <Check size={20} />
+                      </button>
+                      <button className="icon-btn text-red-500" onClick={handleCropCancel} title="取消">
+                        <X size={20} />
+                      </button>
+                    </div>
+                  )}
+                  <div className='text-sm text-gray-500'>
+                      {loading ? "处理中..." : (workerReady ? "Worker 已就绪" : (opencvLoaded ? "正在初始化Canvas..." : "正在加载 OpenCV..."))}
+                  </div>
                 </div>
-              )}
+
+                {/* 画布区域 */}
+                <div ref={canvasContainerRef} className="flex-1 grid place-items-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative">
+                  {loading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-gray-800/50 backdrop-blur-sm z-20">
+                      <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+                    </div>
+                  )}
+                  <canvas 
+                    id="canvas" 
+                    ref={canvasRef} 
+                    className={`shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
+                    style={{
+                      width: `${imageSize.width * zoom}px`,
+                      height: `${imageSize.height * zoom}px`,
+                    }}
+                  ></canvas>
+                  <canvas
+                    id="crop-canvas"
+                    ref={cropCanvasRef}
+                    className="absolute"
+                    style={{ display: 'none' }}
+                    onMouseDown={handleCanvasMouseDown}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseUp={handleCanvasMouseUp}
+                    onMouseLeave={handleCanvasMouseUp}
+                  ></canvas>
+                  {!image && (
+                    <div className="absolute flex items-center justify-center inset-0">
+                      <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
+                        <h2 className="text-2xl font-semibold mb-2">未加载图像</h2>
+                        <p className="text-gray-500 dark:text-gray-400">上传一张图片开始编辑</p>
+                        <button onClick={handleUploadClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
+                          上传图片
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </main>
+              
+              {/* 底部状态/工具栏 - 关键修复：添加 flex-shrink-0 防止被挤压 */}
+              <footer className="h-10 flex-shrink-0 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm z-10 relative">
+                <div className="text-center">
+                  <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
+                </div>
+                {image && (
+                  <div className="absolute right-4 flex items-center space-x-2">
+                    <button 
+                      className={`icon-btn`}
+                      title="适应屏幕"
+                      onClick={() => setZoom(fitZoom)}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M3 3h6v6M21 21h-6v-6"/></svg>
+                    </button>
+                    <button 
+                      className={`icon-btn`}
+                      title="实际尺寸 (100%)"
+                      onClick={() => setZoom(1)}
+                    >
+                      <span className="font-semibold text-sm">1:1</span>
+                    </button>
+                    
+                    <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
+
+                    <button 
+                      className="icon-btn"
+                      title="按住查看原图"
+                      onMouseDown={handleCompareStart}
+                      onMouseUp={handleCompareEnd}
+                      onMouseLeave={handleCompareEnd}
+                    >
+                      <Eye size={18} />
+                    </button>
+                    
+                    <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
+
+                    <button className="icon-btn" onClick={() => handleManualZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
+                    <span 
+                      className="w-16 text-center" 
+                      onDoubleClick={() => setZoom(1)} 
+                      title="双击重置为100%"
+                    >
+                      {`${Math.round(zoom * 100)}%`}
+                    </span>
+                    <button className="icon-btn" onClick={() => handleManualZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
+                  </div>
+                )}
+              </footer>
             </div>
-          </main>
           
-          {/* 底部状态/工具栏 - 关键修复：添加 flex-shrink-0 防止被挤压 */}
-          <footer className="h-10 flex-shrink-0 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm z-10 relative">
-            <div className="text-center">
-              <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
-            </div>
-            {image && (
-              <div className="absolute right-4 flex items-center space-x-2">
-                <button 
-                  className={`icon-btn`}
-                  title="适应屏幕"
-                  onClick={() => setZoom(fitZoom)}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M3 3h6v6M21 21h-6v-6"/></svg>
-                </button>
-                <button 
-                  className={`icon-btn`}
-                  title="实际尺寸 (100%)"
-                  onClick={() => setZoom(1)}
-                >
-                  <span className="font-semibold text-sm">1:1</span>
-                </button>
-                
-                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
-
-                <button 
-                  className="icon-btn"
-                  title="按住查看原图"
-                  onMouseDown={handleCompareStart}
-                  onMouseUp={handleCompareEnd}
-                  onMouseLeave={handleCompareEnd}
-                >
-                  <Eye size={18} />
-                </button>
-                
-                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
-
-                <button className="icon-btn" onClick={() => handleManualZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
-                <span 
-                  className="w-16 text-center" 
-                  onDoubleClick={() => setZoom(1)} 
-                  title="双击重置为100%"
-                >
-                  {`${Math.round(zoom * 100)}%`}
-                </span>
-                <button className="icon-btn" onClick={() => handleManualZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
-              </div>
-            )}
-          </footer>
-        </div>
-        
-        {/* 右侧参数面板 - 工具编辑 */}
-        {activeTool && <ParamsPanel />}
+            {/* 右侧参数面板 - 工具编辑 */}
+            {activeTool && <ParamsPanel />}
+          </>
+        )}
         
         {/* 新的右侧导出面板 */}
         {isExportPanelOpen && (
@@ -1226,6 +1304,193 @@ function App() {
       </div>
     </div>
   );
+}
+
+// 新增：拼接模式组件
+function CollageModePanel({ onExit }) {
+  const [images, setImages] = useState([]);
+  const [layout, setLayout] = useState('vertical'); // 'vertical', 'horizontal', 'grid'
+  const [options, setOptions] = useState({
+    gap: 10,
+    backgroundColor: '#ffffff',
+    columns: 2, // for grid layout
+  });
+  const [previewData, setPreviewData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    // 检查是否有从主编辑器传递过来的初始图片
+    if (window.initialCollageImage) {
+      setImages([window.initialCollageImage]);
+      delete window.initialCollageImage;
+    }
+  }, []);
+  
+  // 当图片或选项变化时，重新生成预览
+  useEffect(() => {
+    if (images.length === 0) {
+      setPreviewData(null);
+      return;
+    }
+
+    const generatePreview = async () => {
+      setLoading(true);
+      try {
+        let result;
+        if (layout === 'horizontal') {
+          result = createHorizontalCollage(images, options);
+        } else if (layout === 'vertical') {
+          result = createVerticalCollage(images, options);
+        } else if (layout === 'grid') {
+          result = createGridCollage(images, options);
+        }
+        setPreviewData(result);
+      } catch (error) {
+        console.error("创建拼接预览失败:", error);
+        alert("创建拼接预览失败: " + error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    generatePreview();
+  }, [images, layout, options]);
+
+  const handleFileChange = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setLoading(true);
+    try {
+      const newImages = await loadImagesFromFiles(files);
+      setImages(prev => [...prev, ...newImages]);
+    } catch (error) {
+      alert("加载图片失败: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+    // 重置 input 以便可以再次选择相同的文件
+    e.target.value = null;
+  };
+
+  const handleImageRemove = (indexToRemove) => {
+    setImages(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+  
+  const handleApply = () => {
+    if (!previewData) {
+      alert("没有可应用的拼接图像。");
+      return;
+    }
+    onExit(previewData);
+  };
+  
+  return (
+    <div className="flex-1 flex bg-gray-200 dark:bg-gray-900 overflow-hidden">
+      {/* 左侧设置面板 */}
+      <aside className="w-80 bg-white dark:bg-gray-800 p-4 overflow-y-auto flex flex-col border-r border-gray-300 dark:border-gray-700">
+        <h2 className="text-xl font-semibold mb-4">图片拼接</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="font-medium">布局</label>
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              <button onClick={() => setLayout('vertical')} className={`layout-btn ${layout === 'vertical' ? 'active' : ''}`}>垂直</button>
+              <button onClick={() => setLayout('horizontal')} className={`layout-btn ${layout === 'horizontal' ? 'active' : ''}`}>水平</button>
+              <button onClick={() => setLayout('grid')} className={`layout-btn ${layout === 'grid' ? 'active' : ''}`}>网格</button>
+            </div>
+          </div>
+          
+          {layout === 'grid' && (
+            <div>
+              <label htmlFor="columns" className="font-medium">列数</label>
+              <input 
+                id="columns" 
+                type="number" 
+                min="1" 
+                value={options.columns} 
+                onChange={e => setOptions(o => ({ ...o, columns: parseInt(e.target.value, 10) || 1 }))} 
+                className="w-full mt-1 p-2 rounded bg-gray-100 dark:bg-gray-700" 
+              />
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="gap" className="font-medium">间距 ({options.gap}px)</label>
+            <input id="gap" type="range" min="0" max="100" value={options.gap} onChange={e => setOptions(o => ({ ...o, gap: parseInt(e.target.value, 10) }))} className="w-full mt-1" />
+          </div>
+
+          <div>
+            <label htmlFor="bgColor" className="font-medium">背景色</label>
+            <input id="bgColor" type="color" value={options.backgroundColor} onChange={e => setOptions(o => ({ ...o, backgroundColor: e.target.value }))} className="w-full h-10 mt-1 p-1" />
+          </div>
+        </div>
+        
+        <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-700">
+          <h3 className="font-medium mb-2">已添加图片 ({images.length})</h3>
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+            {images.map((img, index) => (
+              <div key={index} className="flex items-center justify-between bg-gray-100 dark:bg-gray-700 p-2 rounded">
+                <span className="text-sm truncate">图片 {index + 1} ({img.width}x{img.height})</span>
+                <button onClick={() => handleImageRemove(index)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full">
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => fileInputRef.current.click()} className="w-full mt-2 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+            添加图片
+          </button>
+          <input 
+            id="collage-file-input"
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileChange} 
+            multiple 
+            accept="image/*" 
+            className="hidden" 
+          />
+        </div>
+
+        <div className="mt-auto pt-4 space-x-2 flex">
+          <button onClick={() => onExit(null)} className="flex-1 py-2 rounded bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500">取消</button>
+          <button onClick={handleApply} className="flex-1 py-2 rounded bg-green-500 text-white hover:bg-green-600" disabled={!previewData || loading}>
+            {loading ? '生成中...' : '应用'}
+          </button>
+        </div>
+      </aside>
+      
+      {/* 右侧预览区 */}
+      <main className="flex-1 grid place-items-center p-4 overflow-auto">
+        {loading && (
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+        )}
+        {previewData && !loading ? (
+          <CanvasPreview imageData={previewData} />
+        ) : (
+          !loading && <div className="text-center text-gray-500">请添加图片以开始拼接</div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+// 帮助预览拼接结果的组件
+function CanvasPreview({ imageData }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas && imageData) {
+      canvas.width = imageData.width;
+      canvas.height = imageData.height;
+      const ctx = canvas.getContext('2d');
+      ctx.putImageData(imageData, 0, 0);
+    }
+  }, [imageData]);
+
+  return <canvas ref={canvasRef} className="max-w-full max-h-full object-contain shadow-lg" />;
 }
 
 export default App; 

@@ -55,6 +55,17 @@
   }
 }
 
+/* 新增：拼接模式布局按钮样式 */
+.layout-btn {
+  @apply px-4 py-2 text-sm font-medium text-center rounded-md border transition-colors;
+  @apply bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600;
+  @apply hover:bg-gray-200 dark:hover:bg-gray-600;
+}
+
+.layout-btn.active {
+  @apply bg-blue-500 text-white border-blue-500;
+}
+
 /* 针对 webkit 浏览器的自定义滚动条 */
 ::-webkit-scrollbar {
   width: 8px;
