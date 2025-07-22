@@ -297,6 +297,21 @@ self.wasmProcessImage = async function(imageData, op, params, ctx, timer) {
         kernel.delete();
         break;
       }
+      case 'compress': {
+        // 在WebAssembly中，我们现在只关心缩放，因为所有压缩逻辑都在主线程的导出面板中处理。
+        const { scale = 1.0 } = params; 
+        
+        // 计算新尺寸
+        const newWidth = Math.round(src.cols * scale);
+        const newHeight = Math.round(src.rows * scale);
+        
+        dst = new self.cv.Mat();
+        const dsize = new self.cv.Size(newWidth, newHeight);
+        
+        // 使用双线性插值调整图像大小
+        self.cv.resize(src, dst, dsize, 0, 0, self.cv.INTER_LINEAR);
+        break;
+      }
       default:
         dst = src.clone();
         break;

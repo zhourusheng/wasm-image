@@ -1,13 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Palette, Copy, Wand2, Eye
+  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Palette, Copy, Wand2, Eye, FileOutput
 } from 'lucide-react';
 import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
 import { logPerformanceToConsole } from './utils/performanceLogger';
+import { compressCanvasImage, formatFileSize } from './utils/filters';
 
 function App() {
   const [image, setImage] = useState(null);
+  const [originalFileInfo, setOriginalFileInfo] = useState({ size: 0, name: '' });
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const [isCropMode, setIsCropMode] = useState(false);
   const [cropArea, setCropArea] = useState(null);
@@ -29,6 +31,20 @@ function App() {
   const [activeTool, setActiveTool] = useState(null);
   const [toolParams, setToolParams] = useState({});
   const [stagedImage, setStagedImage] = useState(null); // 用于暂存进入工具调整前的图像状态
+
+  // 新增：导出面板相关状态
+  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [isGeneratingExport, setIsGeneratingExport] = useState(false);
+  const [exportParams, setExportParams] = useState({
+    quality: 0.8,
+    scale: 1.0,
+    format: 'image/jpeg',
+    previewSize: null,
+    originalSize: null,
+    originalSizeBytes: null,
+    compressedBlob: null,
+    previewUrl: null,
+  });
 
   // 控制画布渲染后显示，避免白框闪烁
   const [isCanvasRendered, setIsCanvasRendered] = useState(false);
@@ -94,6 +110,42 @@ function App() {
                 setWorkerReady(true);
                 console.log("Worker 已准备好处理图像。");
                 break;
+            case 'compress-preview-ready':
+                // 处理压缩预览的结果
+                console.log('Worker 完成压缩预览');
+                if (payload.perfLog) {
+                    logPerformanceToConsole(payload.perfLog);
+                }
+                
+                // 创建 Blob 对象和预览 URL
+                const blob = new Blob([payload.compressedBuffer], { type: payload.format });
+                const url = URL.createObjectURL(blob);
+                
+                // 获取原始大小信息用于显示
+                const originalSizeBytes = toolParams.originalSizeBytes || 0;
+                
+                // 导入格式化函数并更新工具参数
+                import('./utils/filters').then(({ formatFileSize }) => {
+                    // 更新工具参数
+                    setToolParams(prev => ({
+                        ...prev,
+                        previewSize: formatFileSize(payload.size),
+                        previewUrl: url,
+                        compressedBlob: blob,
+                        compressedSize: payload.size
+                    }));
+                });
+                
+                // 显示结果
+                if (payload.imageData) {
+                    setImageSize({ width: payload.imageData.width, height: payload.imageData.height });
+                    setIsCanvasRendered(true);
+                }
+                
+                clearTimeout(loaderTimeoutRef.current);
+                setLoading(false);
+                break;
+                
             case 'image-processed':
                 console.log('Worker 完成图像处理');
                 if (payload.perfLog) {
@@ -143,6 +195,9 @@ function App() {
     const file = e.target.files[0];
     if (!file) return;
 
+    // 关键修复：在这里捕获真实的文件信息
+    setOriginalFileInfo({ size: file.size, name: file.name });
+    
     try {
       const loadedImage = await loadImageFromFile(file);
       // 仅更新 image state，触发上面的 useEffect 来处理后续逻辑
@@ -155,14 +210,6 @@ function App() {
 
   const handleUploadClick = () => {
     fileInputRef.current.click();
-  };
-  
-  const handleDownloadClick = () => {
-    if (!image) {
-      alert('请先上传一张图片');
-      return;
-    }
-    exportImage(canvasRef.current, '已编辑图像');
   };
   
   const handleCopyClick = async () => {
@@ -228,7 +275,7 @@ function App() {
   };
 
   // --- 工具栏按钮现在用于激活工具 ---
-  const handleToolActivate = (toolName, defaultParams = {}) => {
+  const handleToolActivate = async (toolName, defaultParams = {}) => {
     if (!image) {
         alert('请先上传一张图片');
         return;
@@ -240,19 +287,230 @@ function App() {
       return;
     }
 
+    // 保存当前状态
+    const currentState = historyManager.getCurrentState();
+    setStagedImage(currentState);
+
+    // 设置初始参数
+    let initialParams = { ...defaultParams };
+    
+    // 如果是压缩工具，需要特殊处理
+    if (toolName === 'compress') {
+      initialParams = {
+        quality: 0.8,
+        scale: 1.0,
+        format: 'image/jpeg',
+        ...defaultParams
+      };
+      
+      // 获取原始图像大小信息
+      try {
+        const { getOriginalImageSize, formatFileSize } = await import('./utils/filters');
+        
+        // 优先使用当前状态来计算大小
+        const sourceForSize = currentState || originalImageRef.current;
+        if (sourceForSize) {
+          const origSize = await getOriginalImageSize(sourceForSize);
+          if (origSize) {
+
+            initialParams.originalSize = formatFileSize(origSize);
+            initialParams.originalSizeBytes = origSize;
+          }
+        }
+      } catch (error) {
+        console.error('获取原始图像大小失败:', error);
+      }
+      
+      setActiveTool(toolName);
+      setToolParams(initialParams);
+      
+      // 对压缩工具使用特殊预览处理
+      if (currentState) {
+        handleCompressPreview(currentState, initialParams);
+      }
+      return;
+    }
+
+    // 其他常规工具处理
     setActiveTool(toolName);
-    setToolParams(defaultParams);
-    setStagedImage(historyManager.getCurrentState());
+    setToolParams(initialParams);
+    
     // 立即应用一次默认效果作为预览
-    if (Object.keys(defaultParams).length > 0) {
-      processEdit(toolName, defaultParams, true);
+    if (currentState && Object.keys(initialParams).length > 0) {
+      processEdit(toolName, initialParams, true);
     }
   };
   
   const handleParamsChange = (newParams) => {
     const updatedParams = { ...toolParams, ...newParams };
     setToolParams(updatedParams);
-    processEdit(activeTool, updatedParams, true);
+    
+    if (activeTool === 'compress') {
+      handleCompressPreview(stagedImage, updatedParams);
+    } else {
+      processEdit(activeTool, updatedParams, true);
+    }
+  };
+
+  // 处理图片压缩预览
+  const handleCompressPreview = async (imageData, params) => {
+    if (!imageData || !canvasRef.current) return;
+    
+    const { quality = 0.8, scale = 1.0, format = 'image/jpeg' } = params;
+    
+    // 1. 先应用缩放处理（如果需要）
+    // 注意：不能直接操作已转移到 OffscreenCanvas 的 canvas
+    // 需要通过 Worker 进行处理
+    processEdit('compress', { scale, quality, format, isCompressPreview: true }, true);
+    
+    // 2. 获取原始图像大小（如果未设置）并更新参数
+    try {
+      let originalSize = params.originalSize;
+      let originalSizeBytes = params.originalSizeBytes;
+      
+      // 如果尚未设置原始大小
+      if (!originalSize) {
+        const { getOriginalImageSize, formatFileSize } = await import('./utils/filters');
+        
+        // 优先使用 imageData 来计算大小
+        const sourceForSize = imageData;
+        if (sourceForSize) {
+          const origSize = await getOriginalImageSize(sourceForSize);
+          if (origSize) {
+
+            originalSize = formatFileSize(origSize);
+            originalSizeBytes = origSize;
+            
+            // 更新工具参数以包含原始大小信息
+            setToolParams(prev => ({
+              ...prev,
+              originalSize,
+              originalSizeBytes
+            }));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('获取原始图像大小失败:', error);
+    }
+  };
+
+  // --- 导出功能重构 ---
+  const handleOpenExportPanel = async () => {
+    if (!image) {
+      alert('请先上传一张图片');
+      return;
+    }
+
+    // 关闭任何可能已打开的工具面板
+    if (activeTool) {
+      handleCancelTool();
+    }
+    
+    setIsExportPanelOpen(true);
+
+    // 使用我们保存的真实文件信息
+    const origSize = originalFileInfo.size;
+    
+    // 关键修复：先构建一个完整的初始参数对象，避免使用陈旧的状态
+    const initialExportParams = {
+      quality: 0.8,
+      scale: 1.0,
+      format: 'image/jpeg',
+      previewSize: null,
+      originalSizeBytes: origSize,
+      originalSize: origSize ? formatFileSize(origSize) : '未知',
+      compressedBlob: null,
+      previewUrl: null,
+    };
+    
+    // 使用这个完整、全新的对象来触发第一次预览生成
+    await handleExportParamsChange(initialExportParams);
+  };
+
+  const handleCloseExportPanel = () => {
+    // 清理可能已创建的Blob URL
+    if (exportParams.previewUrl) {
+      URL.revokeObjectURL(exportParams.previewUrl);
+    }
+    setIsExportPanelOpen(false);
+    // 重置为默认值
+    setExportParams({
+      quality: 0.8,
+      scale: 1.0,
+      format: 'image/jpeg',
+      previewSize: null,
+      originalSize: null,
+      originalSizeBytes: null,
+      compressedBlob: null,
+      previewUrl: null,
+    });
+  };
+
+  const handleExportParamsChange = async (newParams) => {
+    const updatedParams = { ...exportParams, ...newParams };
+    setExportParams(updatedParams);
+    setIsGeneratingExport(true);
+
+    const currentImageData = historyManager.getCurrentState();
+    if (!currentImageData) {
+      setIsGeneratingExport(false);
+      return;
+    }
+
+    // 为了预览，我们需要一个临时的canvas来绘制缩放后的图像
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // 计算缩放后的尺寸
+    const newWidth = Math.round(currentImageData.width * updatedParams.scale);
+    const newHeight = Math.round(currentImageData.height * updatedParams.scale);
+    tempCanvas.width = newWidth;
+    tempCanvas.height = newHeight;
+    
+    // 将当前图像数据绘制到临时画布上，并进行缩放
+    const tempImage = await createImageBitmap(currentImageData);
+    tempCtx.drawImage(tempImage, 0, 0, newWidth, newHeight);
+
+    try {
+      const { blob, size, url } = await compressCanvasImage(tempCanvas, updatedParams.quality, updatedParams.format);
+      
+      // 清理上一个预览的URL
+      if (exportParams.previewUrl) {
+        URL.revokeObjectURL(exportParams.previewUrl);
+      }
+      
+      setExportParams(prev => ({
+        ...prev,
+        ...updatedParams,
+        previewSize: formatFileSize(size),
+        compressedBlob: blob,
+        previewUrl: url,
+      }));
+    } catch(err) {
+      console.error("无法生成导出预览:", err);
+    } finally {
+      setIsGeneratingExport(false);
+    }
+  };
+  
+  const handleConfirmExport = () => {
+    if (!exportParams.compressedBlob || !exportParams.previewUrl) {
+      alert("导出文件尚未准备好，请稍等。");
+      return;
+    }
+    
+    const extension = exportParams.format.split('/')[1] || 'jpg';
+    const originalName = originalFileInfo.name.split('.').slice(0, -1).join('.');
+    const filename = `${originalName}-edited.${extension}`;
+
+    const link = document.createElement('a');
+    link.href = exportParams.previewUrl;
+    link.download = filename;
+    link.click();
+    
+    // 下载后关闭面板
+    handleCloseExportPanel();
   };
 
   const handleApplyTool = () => {
@@ -266,6 +524,11 @@ function App() {
     setLoading(false);
     // 恢复到未应用工具前的状态
     if (stagedImage) {
+      // 如果是压缩工具，需要清理预览URL
+      if (activeTool === 'compress' && toolParams.previewUrl) {
+        URL.revokeObjectURL(toolParams.previewUrl);
+      }
+      
       imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: stagedImage, action: 'original', isHistoryNavigation: true } });
     }
     setActiveTool(null);
@@ -532,6 +795,55 @@ function App() {
               </div>
             </div>
           );
+        case 'compress':
+          return (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="quality" className="text-sm">压缩质量</label>
+                <input id="quality" type="range" min="0.1" max="1" step="0.1" value={toolParams.quality || 0.8}
+                  onChange={(e) => handleParamsChange({ ...toolParams, quality: parseFloat(e.target.value) })}/>
+                <div className="text-center text-sm">{Math.round((toolParams.quality || 0.8) * 100)}%</div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="scale" className="text-sm">调整大小</label>
+                <input id="scale" type="range" min="0.1" max="1" step="0.1" value={toolParams.scale || 1}
+                  onChange={(e) => handleParamsChange({ ...toolParams, scale: parseFloat(e.target.value) })}/>
+                <div className="text-center text-sm">{Math.round((toolParams.scale || 1) * 100)}%</div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm">图片格式</label>
+                <div className="flex gap-2">
+                  <button 
+                    className={`px-2 py-1 rounded ${toolParams.format === 'image/jpeg' || !toolParams.format ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}
+                    onClick={() => handleParamsChange({ ...toolParams, format: 'image/jpeg' })}
+                  >
+                    JPEG
+                  </button>
+                  <button 
+                    className={`px-2 py-1 rounded ${toolParams.format === 'image/png' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}
+                    onClick={() => handleParamsChange({ ...toolParams, format: 'image/png' })}
+                  >
+                    PNG
+                  </button>
+                  <button 
+                    className={`px-2 py-1 rounded ${toolParams.format === 'image/webp' ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600'}`}
+                    onClick={() => handleParamsChange({ ...toolParams, format: 'image/webp' })}
+                  >
+                    WebP
+                  </button>
+                </div>
+              </div>
+              {toolParams.previewSize && (
+                <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-700 rounded">
+                  <div className="text-sm font-medium">预估大小</div>
+                  <div className="mt-2">
+                    <div className="text-sm mb-2">原始: {toolParams.originalSize || '未知'}</div>
+                    <div className="text-sm">压缩后: {toolParams.previewSize || '未知'}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
         default:
           return <p className="text-sm text-gray-500">该功能无参数可调。</p>;
       }
@@ -573,8 +885,8 @@ function App() {
           <button className="icon-btn" onClick={handleCopyClick} title="复制图像">
             <Copy size={20} />
           </button>
-          <button className="icon-btn" onClick={handleDownloadClick} title="下载图像">
-            <Download size={20} />
+          <button className="icon-btn" onClick={handleOpenExportPanel} title="导出图像">
+            <FileOutput size={20} />
           </button>
         </div>
       </header>
@@ -615,6 +927,7 @@ function App() {
             <button className="icon-btn-group" onClick={handleFlipH} disabled={!image || loading} title="水平翻转"><FlipHorizontal size={20} /></button>
             <button className="icon-btn-group" onClick={handleFlipV} disabled={!image || loading} title="垂直翻转"><FlipVertical size={20} /></button>
           </div>
+          
         </aside>
 
         {/* 主内容 */}
@@ -682,34 +995,84 @@ function App() {
               </div>
             )}
           </div>
-          
-          {/* 底部 */}
-          <footer className="h-10 flex items-center justify-between px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm">
-            <div>
-              <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
-            </div>
-            {image && (
-              <div className="flex items-center space-x-2">
-                <button 
-                  className="icon-btn"
-                  title="按住查看原图"
-                  onMouseDown={handleCompareStart}
-                  onMouseUp={handleCompareEnd}
-                  onMouseLeave={handleCompareEnd}
-                >
-                  <Eye size={18} />
-                </button>
-                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
-                <button className="icon-btn" onClick={() => handleZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
-                <span className="w-12 text-center" onDoubleClick={() => handleZoom(1)} title="双击重置">{Math.round(zoom * 100)}%</span>
-                <button className="icon-btn" onClick={() => handleZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
-              </div>
-            )}
-          </footer>
         </main>
+        
+        {/* 右侧参数面板 - 工具编辑 */}
+        {activeTool && <ParamsPanel />}
+        
+        {/* 新的右侧导出面板 */}
+        {isExportPanelOpen && (
+          <aside className="w-72 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 p-4 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">导出设置</h3>
+              <button onClick={handleCloseExportPanel} className="icon-btn">
+                <X size={20} />
+              </button>
+            </div>
 
-        {/* 右侧参数面板 */}
-        <ParamsPanel />
+            <div className="space-y-6 flex-1 overflow-y-auto pr-2">
+              {/* 尺寸调整 */}
+              <div className="space-y-2">
+                <label htmlFor="export-scale" className="text-sm font-medium">尺寸</label>
+                <div className="flex items-center space-x-2">
+                  <input id="export-scale" type="range" min="0.1" max="2" step="0.05" value={exportParams.scale}
+                    onChange={(e) => handleExportParamsChange({ ...exportParams, scale: parseFloat(e.target.value) })}
+                    className="w-full"
+                  />
+                  <span className="text-sm w-16 text-center">{Math.round(exportParams.scale * 100)}%</span>
+                </div>
+              </div>
+
+              {/* 格式选择 */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">格式</label>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  {['image/jpeg', 'image/png', 'image/webp'].map(format => (
+                    <button key={format}
+                      onClick={() => handleExportParamsChange({ ...exportParams, format })}
+                      className={`py-1 rounded text-center border ${exportParams.format === format ? 'bg-blue-500 text-white border-blue-500' : 'bg-gray-100 dark:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500'}`}
+                    >
+                      {format.split('/')[1].toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 质量调整 (仅JPEG/WebP) */}
+              {['image/jpeg', 'image/webp'].includes(exportParams.format) && (
+                <div className="space-y-2">
+                  <label htmlFor="export-quality" className="text-sm font-medium">质量</label>
+                  <div className="flex items-center space-x-2">
+                    <input id="export-quality" type="range" min="0.1" max="1" step="0.05" value={exportParams.quality}
+                      onChange={(e) => handleExportParamsChange({ ...exportParams, quality: parseFloat(e.target.value) })}
+                      className="w-full"
+                    />
+                    <span className="text-sm w-16 text-center">{Math.round(exportParams.quality * 100)}</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* 预览大小 */}
+              <div className="space-y-2 text-sm">
+                <div className="font-medium">文件大小预览</div>
+                <div className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-md">
+                  <div>原始: <span className="font-mono">{exportParams.originalSize || '...'}</span></div>
+                  <div className="mt-1">预估: <span className="font-mono">{isGeneratingExport ? '计算中...' : (exportParams.previewSize || '...')}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto pt-4">
+              <button 
+                onClick={handleConfirmExport} 
+                className="w-full px-4 py-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-400"
+                disabled={isGeneratingExport}
+              >
+                {isGeneratingExport ? '正在生成...' : '导出文件'}
+              </button>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );

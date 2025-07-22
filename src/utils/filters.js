@@ -5,6 +5,7 @@ export const FILTERS = [
     { id: 'canny', name: '边缘检测' },
     { id: 'threshold', name: '阈值' },
     { id: 'original', name: '原图' },
+    { id: 'compress', name: '图片压缩' },
 ];
 
 /**
@@ -83,4 +84,50 @@ export function applyGaussianBlurJS(originalData, { ksize }) {
   }
 
   return new ImageData(finalData, width, height);
+} 
+
+/**
+ * 将 Canvas 内容压缩为指定质量的图片
+ * @param {HTMLCanvasElement} canvas - 源 Canvas
+ * @param {number} quality - 压缩质量 (0-1 之间)
+ * @param {string} format - 图片格式 ('image/jpeg' 或 'image/png')
+ * @returns {Promise<{blob: Blob, size: number, url: string}>} 压缩后的 Blob、大小和预览 URL
+ */
+export function compressCanvasImage(canvas, quality = 0.8, format = 'image/jpeg') {
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('创建 Blob 对象失败'));
+          return;
+        }
+        
+        const url = URL.createObjectURL(blob);
+        const size = blob.size;
+        
+        resolve({
+          blob,
+          size,
+          url
+        });
+      }, format, quality); // 使用指定格式和质量进行压缩
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+/**
+ * 计算文件大小的可读格式
+ * @param {number} bytes - 文件大小（字节）
+ * @returns {string} 格式化后的文件大小
+ */
+export function formatFileSize(bytes) {
+  if (bytes < 1024) {
+    return bytes + ' B';
+  } else if (bytes < 1024 * 1024) {
+    return (bytes / 1024).toFixed(2) + ' KB';
+  } else {
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
 } 
