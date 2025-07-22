@@ -7,6 +7,42 @@ import HistoryManager from './utils/historyManager';
 import { logPerformanceToConsole } from './utils/performanceLogger';
 import { compressCanvasImage, formatFileSize } from './utils/filters';
 
+/**
+ * 一个简单的性能计时器，用于记录多步骤操作的耗时。
+ */
+class PerformanceTimer {
+  constructor(operationName, metadata = {}) {
+    this.operationName = operationName;
+    this.metadata = metadata;
+    this.steps = [];
+    this.startTime = performance.now();
+    this.lastStepTime = this.startTime;
+    this.step('start');
+  }
+
+  step(stepName) {
+    const now = performance.now();
+    const elapsed = now - this.lastStepTime;
+    this.steps.push({
+      name: stepName,
+      elapsed: parseFloat(elapsed.toFixed(2)),
+    });
+    this.lastStepTime = now;
+  }
+
+  end() {
+    this.step('end');
+    const totalTime = this.lastStepTime - this.startTime;
+    return {
+      operation: this.operationName,
+      metadata: this.metadata,
+      totalTime: parseFloat(totalTime.toFixed(2)),
+      steps: this.steps,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
 function App() {
   const [image, setImage] = useState(null);
   const [originalFileInfo, setOriginalFileInfo] = useState({ size: 0, name: '' });
@@ -458,6 +494,12 @@ function App() {
       return;
     }
 
+    const timer = new PerformanceTimer('export_preview', {
+      scale: updatedParams.scale,
+      format: updatedParams.format,
+      quality: updatedParams.quality,
+    });
+
     // 为了预览，我们需要一个临时的canvas来绘制缩放后的图像
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
@@ -470,10 +512,14 @@ function App() {
     
     // 将当前图像数据绘制到临时画布上，并进行缩放
     const tempImage = await createImageBitmap(currentImageData);
+    timer.step('create_image_bitmap');
+    
     tempCtx.drawImage(tempImage, 0, 0, newWidth, newHeight);
+    timer.step('draw_image_scaled');
 
     try {
       const { blob, size, url } = await compressCanvasImage(tempCanvas, updatedParams.quality, updatedParams.format);
+      timer.step('compress_to_blob');
       
       // 清理上一个预览的URL
       if (exportParams.previewUrl) {
@@ -491,6 +537,8 @@ function App() {
       console.error("无法生成导出预览:", err);
     } finally {
       setIsGeneratingExport(false);
+      const perfLog = timer.end();
+      logPerformanceToConsole(perfLog);
     }
   };
   
@@ -1074,6 +1122,30 @@ function App() {
           </aside>
         )}
       </div>
+      
+      {/* 底部状态/工具栏 */}
+      <footer className="h-10 flex items-center justify-between px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm z-10">
+        <div>
+          <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
+        </div>
+        {image && (
+          <div className="flex items-center space-x-2">
+            <button 
+              className="icon-btn"
+              title="按住查看原图"
+              onMouseDown={handleCompareStart}
+              onMouseUp={handleCompareEnd}
+              onMouseLeave={handleCompareEnd}
+            >
+              <Eye size={18} />
+            </button>
+            <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
+            <button className="icon-btn" onClick={() => handleZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
+            <span className="w-12 text-center" onDoubleClick={() => handleZoom(1)} title="双击重置">{Math.round(zoom * 100)}%</span>
+            <button className="icon-btn" onClick={() => handleZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
+          </div>
+        )}
+      </footer>
     </div>
   );
 }
