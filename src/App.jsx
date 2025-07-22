@@ -88,9 +88,9 @@ function App() {
   const loaderTimeoutRef = useRef(null); // 用于延迟显示加载动画
 
   // 视图缩放与显示模式状态
-  const [zoom, setZoom] = useState(1); // 统一的缩放状态
-  const [viewMode, setViewMode] = useState('fit'); // 'fit' 或 'actual'
-  const [canvasDisplaySize, setCanvasDisplaySize] = useState({ width: 0, height: 0 });
+  const [zoom, setZoom] = useState(1); // 当前画布的缩放比例
+  const [fitZoom, setFitZoom] = useState(1); // 由程序计算的"最佳适应"缩放比例
+  const [userHasZoomed, setUserHasZoomed] = useState(false); // 新增：跟踪用户是否手动缩放过
 
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
@@ -217,50 +217,6 @@ function App() {
     };
   }, []); // 空依赖数组确保此 effect 仅在挂载时运行一次
 
-  // 关键修复：重写视图尺寸计算逻辑
-  useEffect(() => {
-    const calculateDisplaySize = () => {
-      if (!imageSize.width || !canvasContainerRef.current) {
-        setCanvasDisplaySize({ width: 0, height: 0 });
-        return;
-      }
-
-      const container = canvasContainerRef.current;
-      const containerWidth = container.clientWidth - 32;  // 减去 p-4 的内边距
-      const containerHeight = container.clientHeight - 32; // 减去 p-4 的内边距
-
-      if (viewMode === 'fit') {
-        const imageAspectRatio = imageSize.width / imageSize.height;
-        const containerAspectRatio = containerWidth / containerHeight;
-        
-        let targetWidth, targetHeight;
-
-        if (imageAspectRatio > containerAspectRatio) {
-          // 图片比容器“更宽”，以容器宽度为基准
-          targetWidth = containerWidth;
-          targetHeight = containerWidth / imageAspectRatio;
-        } else {
-          // 图片比容器“更高”，以容器高度为基准
-          targetHeight = containerHeight;
-          targetWidth = containerHeight * imageAspectRatio;
-        }
-        setCanvasDisplaySize({ width: targetWidth, height: targetHeight });
-        // 在fit模式下，也更新zoom状态，以便用户可以基于此进行微调
-        setZoom(targetWidth / imageSize.width); 
-      } else { // 'actual' mode
-        setCanvasDisplaySize({
-          width: imageSize.width * zoom,
-          height: imageSize.height * zoom
-        });
-      }
-    };
-    
-    calculateDisplaySize(); // 初始计算
-
-    window.addEventListener('resize', calculateDisplaySize);
-    return () => window.removeEventListener('resize', calculateDisplaySize);
-  }, [imageSize, viewMode, zoom]);
-  
   // 用于处理新图像加载的 effect
   useEffect(() => {
     if (image && workerReady) {
@@ -271,6 +227,9 @@ function App() {
       historyManager.clear();
       forceUpdate();
       imageWorker.current.postMessage({ type: 'image-process', payload: { imageData, action: 'original' } });
+      
+      // 重置用户缩放标记，这样新图片会使用自适应缩放
+      setUserHasZoomed(false);
     }
   }, [image, workerReady]);
 
@@ -632,10 +591,53 @@ function App() {
 
   // --- 视图缩放功能 ---
   const handleManualZoom = (newZoom) => {
-    const clampedZoom = Math.max(0.1, Math.min(newZoom, 5)); // 限制缩放在 10% 到 500% 之间
+    const clampedZoom = Math.max(0.01, Math.min(newZoom, 10)); // 缩放范围限制
     setZoom(clampedZoom);
+    setUserHasZoomed(true); // 标记用户已手动缩放
   };
   
+  // 关键修复：分离 "初始适应" 和 "响应式适应" 的逻辑
+  useEffect(() => {
+    // 仅在图片尺寸变化时（即新图片加载时）执行
+    if (!imageSize.width || !canvasContainerRef.current) return;
+
+    const container = canvasContainerRef.current;
+    const containerWidth = container.clientWidth - 32;
+    const containerHeight = container.clientHeight - 32;
+    const scaleX = containerWidth / imageSize.width;
+    const scaleY = containerHeight / imageSize.height;
+    const newFitZoom = Math.min(scaleX, scaleY);
+
+    setFitZoom(newFitZoom);
+    
+    // 修复：仅在首次加载图片且用户未手动缩放时应用自适应缩放
+    if (!userHasZoomed) {
+      setZoom(newFitZoom); // 设置初始的适应缩放
+    }
+  }, [imageSize, userHasZoomed]);
+
+  useEffect(() => {
+    // 仅在窗口大小变化时更新 fitZoom，不影响当前的 zoom
+    if (!canvasContainerRef.current) return;
+
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry && imageSize.width > 0) {
+        const { width, height } = entry.contentRect;
+        const containerWidth = width - 32;
+        const containerHeight = height - 32;
+        const scaleX = containerWidth / imageSize.width;
+        const scaleY = containerHeight / imageSize.height;
+        const newFitZoom = Math.min(scaleX, scaleY);
+        setFitZoom(newFitZoom);
+        // 移除这里可能存在的 setZoom 调用，确保不覆盖用户的手动缩放
+      }
+    });
+
+    observer.observe(canvasContainerRef.current);
+    return () => observer.disconnect();
+  }, [imageSize]); // 依赖 imageSize 以便在图片变化时重新观察
+
   // --- 原始编辑功能 ---
   const handleRotateCw = () => processEdit('rotate', { angle: 90 });
   const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
@@ -1069,8 +1071,8 @@ function App() {
                 ref={canvasRef} 
                 className={`shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
                 style={{
-                  width: `${canvasDisplaySize.width}px`,
-                  height: `${canvasDisplaySize.height}px`,
+                  width: `${imageSize.width * zoom}px`,
+                  height: `${imageSize.height * zoom}px`,
                 }}
               ></canvas>
               <canvas
@@ -1103,19 +1105,16 @@ function App() {
             {image && (
               <div className="absolute right-4 flex items-center space-x-2">
                 <button 
-                  className={`icon-btn ${viewMode === 'fit' ? 'text-blue-500' : ''}`}
+                  className={`icon-btn`}
                   title="适应屏幕"
-                  onClick={() => setViewMode('fit')}
+                  onClick={() => setZoom(fitZoom)}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M3 3h6v6M21 21h-6v-6"/></svg>
                 </button>
                 <button 
-                  className={`icon-btn ${viewMode === 'actual' ? 'text-blue-500' : ''}`}
+                  className={`icon-btn`}
                   title="实际尺寸 (100%)"
-                  onClick={() => {
-                    setViewMode('actual');
-                    setZoom(1); 
-                  }}
+                  onClick={() => setZoom(1)}
                 >
                   <span className="font-semibold text-sm">1:1</span>
                 </button>
