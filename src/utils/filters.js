@@ -8,37 +8,6 @@ export const FILTERS = [
 ];
 
 /**
- * 使用纯 JavaScript 在主线程上对 ImageData 应用 Sepia 滤镜。
- * @param {ImageData} originalData 原始图像数据。
- * @returns {ImageData} 应用滤镜后的新图像数据。
- */
-export function applySepiaJS(originalData) {
-  const { data, width, height } = originalData;
-  // 创建一个新的 Uint8ClampedArray 来存放结果，避免修改原始数据
-  const newData = new Uint8ClampedArray(data.length);
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    const a = data[i + 3];
-
-    // Sepia 色彩转换公式
-    const newR = r * 0.393 + g * 0.769 + b * 0.189;
-    const newG = r * 0.349 + g * 0.686 + b * 0.168;
-    const newB = r * 0.272 + g * 0.534 + b * 0.131;
-
-    // 将计算结果存入新数组，并确保值在 0-255 范围内
-    newData[i] = Math.min(255, newR);
-    newData[i + 1] = Math.min(255, newG);
-    newData[i + 2] = Math.min(255, newB);
-    newData[i + 3] = a; // Alpha 通道保持不变
-  }
-
-  return new ImageData(newData, width, height);
-}
-
-/**
  * 使用纯 JavaScript 在主线程上对 ImageData 应用高斯模糊。
  * 这是一个高效的、分为两遍（水平和垂直）的实现。
  * @param {ImageData} originalData 原始图像数据。

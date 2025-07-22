@@ -1,11 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Palette, Copy, Wand2
+  Crop, Download, Folder, SlidersHorizontal, Trash2, Undo, Redo, ZoomIn, ZoomOut, FlipHorizontal, FlipVertical, RotateCcw, RotateCw, ImagePlay, Check, X, Sun, Contrast, Droplets, Palette, Copy, Wand2, Eye
 } from 'lucide-react';
 import { loadImageFromFile, getImageDataFromImage, exportImage, copyImageToClipboard } from './utils/imageUtils';
 import HistoryManager from './utils/historyManager';
 import { logPerformanceToConsole } from './utils/performanceLogger';
-import { applySepiaJS, applyGaussianBlurJS } from './utils/filters';
 
 function App() {
   const [image, setImage] = useState(null);
@@ -133,6 +132,7 @@ function App() {
       setLoading(true);
       setIsCanvasRendered(false); // 加载新图片时，先隐藏画布
       const imageData = getImageDataFromImage(image);
+      originalImageRef.current = imageData; // 存储原始图像数据
       historyManager.clear();
       forceUpdate();
       imageWorker.current.postMessage({ type: 'image-process', payload: { imageData, action: 'original' } });
@@ -189,61 +189,31 @@ function App() {
     }
   };
   
-  const handleSepiaCompare = () => {
-    if (!image || loading) return;
+  const handleRevertToOriginal = () => {
+    if (!originalImageRef.current || loading) return;
 
-    const currentImageData = historyManager.getCurrentState();
-    if (!currentImageData) {
-        alert("没有可用的图像数据。");
-        return;
+    if (confirm('您确定要撤销所有操作，恢复到原始图像吗？')) {
+      setLoading(true);
+      setActiveTool(null); // 关闭右侧参数面板
+      setStagedImage(null); // 清除预览状态
+      // 清空历史记录
+      historyManager.clear();
+      // 直接将原始图像数据发给 worker 处理，这会自动成为新的历史记录起点
+      imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: originalImageRef.current, action: 'original' } });
+      forceUpdate(); // 立即更新UI状态
     }
-
-    console.log('%c--- 开始性能对比：Sepia 滤镜 ---', 'background: #222; color: #bada55');
-
-    // 1. 测试纯 JavaScript 版本
-    const startTime = performance.now();
-    applySepiaJS(currentImageData); // 我们只执行它来测量时间，不使用其返回结果
-    const endTime = performance.now();
-    const jsDuration = (endTime - startTime).toFixed(2);
-    
-    console.group(`%cJavaScript 版本`, 'color: #f0ad4e;');
-    console.log(`图像尺寸: ${currentImageData.width}x${currentImageData.height}`);
-    console.log(`主线程耗时: ${jsDuration}ms`);
-    console.groupEnd();
-    
-    // 2. 触发 WebAssembly 版本进行处理和渲染
-    // processEdit 函数会处理加载状态和历史记录，并触发 Wasm 的性能日志
-    console.log('现在触发 WebAssembly 版本...');
-    processEdit('sepia');
   };
 
-  const handleBlurCompare = () => {
-    if (!image || loading) return;
+  const handleCompareStart = () => {
+    if (!originalImageRef.current || loading) return;
+    // 发送原始图像用于预览，标记为历史导航以避免存入历史记录
+    imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: originalImageRef.current, action: 'original', isHistoryNavigation: true } });
+  };
 
-    const currentImageData = historyManager.getCurrentState();
-    if (!currentImageData) {
-        alert("没有可用的图像数据。");
-        return;
-    }
-    
-    const params = { ksize: 5 }; // 使用固定的模糊半径进行对比
-
-    console.log('%c--- 开始性能对比：高斯模糊 (ksize=5) ---', 'background: #222; color: #bada55');
-
-    // 1. 测试纯 JavaScript 版本
-    const startTime = performance.now();
-    applyGaussianBlurJS(currentImageData, params);
-    const endTime = performance.now();
-    const jsDuration = (endTime - startTime).toFixed(2);
-    
-    console.group(`%cJavaScript 版本`, 'color: #f0ad4e;');
-    console.log(`图像尺寸: ${currentImageData.width}x${currentImageData.height}`);
-    console.log(`主线程耗时: ${jsDuration}ms`);
-    console.groupEnd();
-    
-    // 2. 触发 WebAssembly 版本
-    console.log('现在触发 WebAssembly 版本...');
-    processEdit('blur', params);
+  const handleCompareEnd = () => {
+    if (!historyManager.getCurrentState() || loading) return;
+    // 发送当前最新的编辑状态用于预览，恢复视图
+    imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: historyManager.getCurrentState(), action: 'original', isHistoryNavigation: true } });
   };
 
   const handleRedo = () => {
@@ -611,7 +581,7 @@ function App() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧工具栏 */}
-        <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-4 text-xs">
+        <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-4 text-xs overflow-y-auto">
           {/* 调整 */}
           <div className="flex flex-col items-center space-y-1 w-full">
             <span className="font-medium text-gray-500">调整</span>
@@ -627,13 +597,11 @@ function App() {
           <div className="flex flex-col items-center space-y-1 w-full">
             <span className="font-medium text-gray-500">效果</span>
             <button className="icon-btn-group" onClick={() => processEdit('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
-            <button className={`icon-btn-group ${activeTool === 'blur' ? 'active' : ''}`} onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊 (Wasm)">B</button>
-            <button className="icon-btn-group" onClick={handleBlurCompare} disabled={!image || loading} title="模糊 (JS 对比)">JS</button>
+            <button className={`icon-btn-group ${activeTool === 'blur' ? 'active' : ''}`} onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
             <button className="icon-btn-group" onClick={() => processEdit('canny')} disabled={!image || loading} title="边缘检测">C</button>
             <button className="icon-btn-group" onClick={() => processEdit('threshold')} disabled={!image || loading} title="阈值">T</button>
             <button className="icon-btn-group" onClick={() => processEdit('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
-            <button className="icon-btn-group" onClick={() => processEdit('sepia')} disabled={!image || loading} title="复古 (Wasm)">S</button>
-            <button className="icon-btn-group" onClick={handleSepiaCompare} disabled={!image || loading} title="复古 (JS 对比)">JS</button>
+            <button className="icon-btn-group" onClick={() => processEdit('sepia')} disabled={!image || loading} title="复古">S</button>
           </div>
 
           <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
@@ -659,6 +627,9 @@ function App() {
               </button>
               <button className="icon-btn" onClick={handleRedo} disabled={!historyManager.canRedo() || loading} title="重做">
                 <Redo size={20} />
+              </button>
+              <button className="icon-btn" onClick={handleRevertToOriginal} disabled={!image || loading} title="重置所有操作">
+                <Trash2 size={20} />
               </button>
             </div>
             {isCropMode && (
@@ -719,6 +690,16 @@ function App() {
             </div>
             {image && (
               <div className="flex items-center space-x-2">
+                <button 
+                  className="icon-btn"
+                  title="按住查看原图"
+                  onMouseDown={handleCompareStart}
+                  onMouseUp={handleCompareEnd}
+                  onMouseLeave={handleCompareEnd}
+                >
+                  <Eye size={18} />
+                </button>
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
                 <button className="icon-btn" onClick={() => handleZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
                 <span className="w-12 text-center" onDoubleClick={() => handleZoom(1)} title="双击重置">{Math.round(zoom * 100)}%</span>
                 <button className="icon-btn" onClick={() => handleZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
