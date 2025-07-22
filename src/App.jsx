@@ -62,6 +62,7 @@ function App() {
   const [opencvLoaded, setOpencvLoaded] = useState(false);
   const [workerReady, setWorkerReady] = useState(false); // 跟踪 worker 是否准备好接收任务
   const [loading, setLoading] = useState(false);
+  const canvasContainerRef = useRef(null);
   
   // 新增：右侧参数面板相关状态
   const [activeTool, setActiveTool] = useState(null);
@@ -86,8 +87,10 @@ function App() {
   const [isCanvasRendered, setIsCanvasRendered] = useState(false);
   const loaderTimeoutRef = useRef(null); // 用于延迟显示加载动画
 
-  // 新增：视图缩放状态
-  const [zoom, setZoom] = useState(1); // 1 = 100%
+  // 视图缩放与显示模式状态
+  const [zoom, setZoom] = useState(1); // 统一的缩放状态
+  const [viewMode, setViewMode] = useState('fit'); // 'fit' 或 'actual'
+  const [canvasDisplaySize, setCanvasDisplaySize] = useState({ width: 0, height: 0 });
 
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
@@ -214,6 +217,50 @@ function App() {
     };
   }, []); // 空依赖数组确保此 effect 仅在挂载时运行一次
 
+  // 关键修复：重写视图尺寸计算逻辑
+  useEffect(() => {
+    const calculateDisplaySize = () => {
+      if (!imageSize.width || !canvasContainerRef.current) {
+        setCanvasDisplaySize({ width: 0, height: 0 });
+        return;
+      }
+
+      const container = canvasContainerRef.current;
+      const containerWidth = container.clientWidth - 32;  // 减去 p-4 的内边距
+      const containerHeight = container.clientHeight - 32; // 减去 p-4 的内边距
+
+      if (viewMode === 'fit') {
+        const imageAspectRatio = imageSize.width / imageSize.height;
+        const containerAspectRatio = containerWidth / containerHeight;
+        
+        let targetWidth, targetHeight;
+
+        if (imageAspectRatio > containerAspectRatio) {
+          // 图片比容器“更宽”，以容器宽度为基准
+          targetWidth = containerWidth;
+          targetHeight = containerWidth / imageAspectRatio;
+        } else {
+          // 图片比容器“更高”，以容器高度为基准
+          targetHeight = containerHeight;
+          targetWidth = containerHeight * imageAspectRatio;
+        }
+        setCanvasDisplaySize({ width: targetWidth, height: targetHeight });
+        // 在fit模式下，也更新zoom状态，以便用户可以基于此进行微调
+        setZoom(targetWidth / imageSize.width); 
+      } else { // 'actual' mode
+        setCanvasDisplaySize({
+          width: imageSize.width * zoom,
+          height: imageSize.height * zoom
+        });
+      }
+    };
+    
+    calculateDisplaySize(); // 初始计算
+
+    window.addEventListener('resize', calculateDisplaySize);
+    return () => window.removeEventListener('resize', calculateDisplaySize);
+  }, [imageSize, viewMode, zoom]);
+  
   // 用于处理新图像加载的 effect
   useEffect(() => {
     if (image && workerReady) {
@@ -584,7 +631,7 @@ function App() {
   };
 
   // --- 视图缩放功能 ---
-  const handleZoom = (newZoom) => {
+  const handleManualZoom = (newZoom) => {
     const clampedZoom = Math.max(0.1, Math.min(newZoom, 5)); // 限制缩放在 10% 到 500% 之间
     setZoom(clampedZoom);
   };
@@ -978,72 +1025,128 @@ function App() {
           
         </aside>
 
-        {/* 主内容 */}
-        <main className="flex-1 flex flex-col">
-          {/* 主内容顶部栏 */}
-          <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center space-x-2">
-              <button className="icon-btn" onClick={handleUndo} disabled={!historyManager.canUndo() || loading} title="撤销">
-                <Undo size={20} />
-              </button>
-              <button className="icon-btn" onClick={handleRedo} disabled={!historyManager.canRedo() || loading} title="重做">
-                <Redo size={20} />
-              </button>
-              <button className="icon-btn" onClick={handleRevertToOriginal} disabled={!image || loading} title="重置所有操作">
-                <Trash2 size={20} />
-              </button>
-            </div>
-            {isCropMode && (
+        {/* 主内容区和底部栏的包装器 */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 主内容 - 关键修复：添加 min-h-0 允许内容区收缩 */}
+          <main className="flex-1 flex flex-col min-h-0">
+            {/* 主内容顶部栏 */}
+            <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center space-x-2">
-                <button className="icon-btn text-green-500" onClick={handleCropConfirm} title="确认">
-                  <Check size={20} />
+                <button className="icon-btn" onClick={handleUndo} disabled={!historyManager.canUndo() || loading} title="撤销">
+                  <Undo size={20} />
                 </button>
-                <button className="icon-btn text-red-500" onClick={handleCropCancel} title="取消">
-                  <X size={20} />
+                <button className="icon-btn" onClick={handleRedo} disabled={!historyManager.canRedo() || loading} title="重做">
+                  <Redo size={20} />
+                </button>
+                <button className="icon-btn" onClick={handleRevertToOriginal} disabled={!image || loading} title="重置所有操作">
+                  <Trash2 size={20} />
                 </button>
               </div>
-            )}
-            <div className='text-sm text-gray-500'>
-                {loading ? "处理中..." : (workerReady ? "Worker 已就绪" : (opencvLoaded ? "正在初始化Canvas..." : "正在加载 OpenCV..."))}
+              {isCropMode && (
+                <div className="flex items-center space-x-2">
+                  <button className="icon-btn text-green-500" onClick={handleCropConfirm} title="确认">
+                    <Check size={20} />
+                  </button>
+                  <button className="icon-btn text-red-500" onClick={handleCropCancel} title="取消">
+                    <X size={20} />
+                  </button>
+                </div>
+              )}
+              <div className='text-sm text-gray-500'>
+                  {loading ? "处理中..." : (workerReady ? "Worker 已就绪" : (opencvLoaded ? "正在初始化Canvas..." : "正在加载 OpenCV..."))}
+              </div>
             </div>
-          </div>
 
-          {/* 画布区域 */}
-          <div className="flex-1 flex items-center justify-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative">
-            {loading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-gray-800/50 backdrop-blur-sm z-20">
-                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
-              </div>
-            )}
-            <div style={{ transform: `scale(${zoom})` }}>
+            {/* 画布区域 */}
+            <div ref={canvasContainerRef} className="flex-1 grid place-items-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative">
+              {loading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-200/50 dark:bg-gray-800/50 backdrop-blur-sm z-20">
+                  <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              )}
               <canvas 
                 id="canvas" 
                 ref={canvasRef} 
-                className={`max-w-full max-h-full shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
+                className={`shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
+                style={{
+                  width: `${canvasDisplaySize.width}px`,
+                  height: `${canvasDisplaySize.height}px`,
+                }}
               ></canvas>
-            </div>
-            <canvas
-              id="crop-canvas"
-              ref={cropCanvasRef}
-              className={`absolute ${!isCropMode ? 'hidden' : 'cursor-crosshair'}`}
-              onMouseDown={handleCanvasMouseDown}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseUp={handleCanvasMouseUp}
-              onMouseLeave={handleCanvasMouseUp}
-            ></canvas>
-            {!image && (
-              <div className="absolute flex items-center justify-center inset-0">
-                <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
-                  <h2 className="text-2xl font-semibold mb-2">未加载图像</h2>
-                  <p className="text-gray-500 dark:text-gray-400">上传一张图片开始编辑</p>
-                  <button onClick={handleUploadClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
-                    上传图片
-                  </button>
+              <canvas
+                id="crop-canvas"
+                className={`absolute hidden`}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
+                onMouseLeave={handleCanvasMouseUp}
+              ></canvas>
+              {!image && (
+                <div className="absolute flex items-center justify-center inset-0">
+                  <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
+                    <h2 className="text-2xl font-semibold mb-2">未加载图像</h2>
+                    <p className="text-gray-500 dark:text-gray-400">上传一张图片开始编辑</p>
+                    <button onClick={handleUploadClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors">
+                      上传图片
+                    </button>
+                  </div>
                 </div>
+              )}
+            </div>
+          </main>
+          
+          {/* 底部状态/工具栏 - 关键修复：添加 flex-shrink-0 防止被挤压 */}
+          <footer className="h-10 flex-shrink-0 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm z-10 relative">
+            <div className="text-center">
+              <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
+            </div>
+            {image && (
+              <div className="absolute right-4 flex items-center space-x-2">
+                <button 
+                  className={`icon-btn ${viewMode === 'fit' ? 'text-blue-500' : ''}`}
+                  title="适应屏幕"
+                  onClick={() => setViewMode('fit')}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M3 3h6v6M21 21h-6v-6"/></svg>
+                </button>
+                <button 
+                  className={`icon-btn ${viewMode === 'actual' ? 'text-blue-500' : ''}`}
+                  title="实际尺寸 (100%)"
+                  onClick={() => {
+                    setViewMode('actual');
+                    setZoom(1); 
+                  }}
+                >
+                  <span className="font-semibold text-sm">1:1</span>
+                </button>
+                
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
+
+                <button 
+                  className="icon-btn"
+                  title="按住查看原图"
+                  onMouseDown={handleCompareStart}
+                  onMouseUp={handleCompareEnd}
+                  onMouseLeave={handleCompareEnd}
+                >
+                  <Eye size={18} />
+                </button>
+                
+                <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
+
+                <button className="icon-btn" onClick={() => handleManualZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
+                <span 
+                  className="w-16 text-center" 
+                  onDoubleClick={() => setZoom(1)} 
+                  title="双击重置为100%"
+                >
+                  {`${Math.round(zoom * 100)}%`}
+                </span>
+                <button className="icon-btn" onClick={() => handleManualZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
               </div>
             )}
-          </div>
-        </main>
+          </footer>
+        </div>
         
         {/* 右侧参数面板 - 工具编辑 */}
         {activeTool && <ParamsPanel />}
@@ -1122,30 +1225,6 @@ function App() {
           </aside>
         )}
       </div>
-      
-      {/* 底部状态/工具栏 */}
-      <footer className="h-10 flex items-center justify-between px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm z-10">
-        <div>
-          <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
-        </div>
-        {image && (
-          <div className="flex items-center space-x-2">
-            <button 
-              className="icon-btn"
-              title="按住查看原图"
-              onMouseDown={handleCompareStart}
-              onMouseUp={handleCompareEnd}
-              onMouseLeave={handleCompareEnd}
-            >
-              <Eye size={18} />
-            </button>
-            <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
-            <button className="icon-btn" onClick={() => handleZoom(zoom - 0.1)}><ZoomOut size={18} /></button>
-            <span className="w-12 text-center" onDoubleClick={() => handleZoom(1)} title="双击重置">{Math.round(zoom * 100)}%</span>
-            <button className="icon-btn" onClick={() => handleZoom(zoom + 0.1)}><ZoomIn size={18} /></button>
-          </div>
-        )}
-      </footer>
     </div>
   );
 }
