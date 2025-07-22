@@ -100,6 +100,7 @@ function App() {
 
   // 新增：拼接模式相关状态
   const [isCollageMode, setIsCollageMode] = useState(false);
+  const isExitingCollage = useRef(false); // 新增：用于防止重复处理的标志
 
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
@@ -228,6 +229,12 @@ function App() {
 
   // 用于处理新图像加载的 effect
   useEffect(() => {
+    // 修复：如果正在从拼接模式退出，我们已经手动处理了，所以跳过这个 effect
+    if (isExitingCollage.current) {
+      isExitingCollage.current = false; // 重置标志
+      return;
+    }
+
     if (image && workerReady) {
       setLoading(true);
       setIsCanvasRendered(false); // 加载新图片时，先隐藏画布
@@ -326,19 +333,105 @@ function App() {
 
   const handleExitCollageMode = (newImageData) => {
     setIsCollageMode(false);
-    if (newImageData) {
-      // 将拼接结果设置为新图片
-      const newImage = new Image();
+    
+    // 如果没有拼接结果，就直接退出
+    if (!newImageData) return;
+    
+    // 设置加载状态
+    setLoading(true);
+    
+    try {
+      // 步骤1: 确保获得有效的ImageData
+      console.log("拼接结果数据:", newImageData.width, newImageData.height, newImageData.data.length);
+      
+      // 步骤2: 将ImageData转换为Blob URL
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = newImageData.width;
       tempCanvas.height = newImageData.height;
-      tempCanvas.getContext('2d').putImageData(newImageData, 0, 0);
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.putImageData(newImageData, 0, 0);
       
-      newImage.onload = () => {
-        setOriginalFileInfo({ size: 0, name: 'collage.png' });
-        setImage(newImage);
-      };
-      newImage.src = tempCanvas.toDataURL();
+      // 步骤3: 从Canvas创建一个新图像
+      tempCanvas.toBlob((blob) => {
+        if (!blob) {
+          console.error("无法创建Blob");
+          setLoading(false);
+          return;
+        }
+        
+        const blobUrl = URL.createObjectURL(blob);
+        const newImage = new Image();
+        
+        newImage.onload = () => {
+          console.log("新图像已加载", newImage.width, newImage.height);
+          
+          // 步骤4: 更新应用状态
+          setOriginalFileInfo({ size: blob.size, name: 'collage.png' });
+          setImageSize({ width: newImage.width, height: newImage.height });
+          
+          // 步骤5: 创建新的ImageData并存储为原始图像
+          const dataCanvas = document.createElement('canvas');
+          dataCanvas.width = newImage.width;
+          dataCanvas.height = newImage.height;
+          const dataCtx = dataCanvas.getContext('2d');
+          dataCtx.drawImage(newImage, 0, 0);
+          const finalImageData = dataCtx.getImageData(0, 0, newImage.width, newImage.height);
+          
+          // 步骤6: 使用这个新生成的ImageData来重置编辑历史
+          originalImageRef.current = finalImageData;
+          historyManager.clear();
+          historyManager.add(finalImageData);
+          
+          // 步骤7: 如果主Canvas已经准备好，直接绘制图像
+          if (canvasRef.current) {
+            const mainCtx = canvasRef.current.getContext('2d');
+            canvasRef.current.width = newImage.width;
+            canvasRef.current.height = newImage.height;
+            mainCtx.drawImage(newImage, 0, 0);
+          }
+          
+          // 步骤8: 通知Worker重置Canvas（但不处理图像，因为我们已经直接绘制了）
+          if (workerReady && imageWorker.current) {
+            // 将图像数据发送给Worker，让Worker知道有新图像
+            const workerData = new ImageData(
+              new Uint8ClampedArray(finalImageData.data),
+              finalImageData.width,
+              finalImageData.height
+            );
+            imageWorker.current.postMessage({
+              type: 'image-process',
+              payload: { 
+                imageData: workerData, 
+                action: 'original',
+                skipRendering: true // 告诉Worker不要重新渲染，因为我们已经处理了
+              }
+            }, [workerData.data.buffer]);
+          }
+          
+          // 步骤9: 更新UI状态
+          setImage(newImage);
+          setUserHasZoomed(false);
+          setIsCanvasRendered(true);
+          setLoading(false);
+          forceUpdate();
+          
+          // 清理
+          URL.revokeObjectURL(blobUrl);
+        };
+        
+        newImage.onerror = (err) => {
+          console.error("加载拼接图像失败:", err);
+          setLoading(false);
+          alert("无法加载拼接后的图像，请重试");
+        };
+        
+        newImage.src = blobUrl;
+      }, 'image/png');
+      
+    } catch (error) {
+      console.error("处理拼接图像时出错:", error);
+      setLoading(false);
+      alert("处理拼接后的图像时发生错误，请重试");
     }
   };
 

@@ -31,7 +31,7 @@ self.wasmInit = async function() {
 }
 
 // 修改函数以接收 ctx 和 timer 并直接渲染
-self.wasmProcessImage = async function(imageData, op, params, ctx, timer) {
+self.wasmProcessImage = async function(imageData, op, params, ctx, timer, skipRendering = false) {
   if (!timer) {
     throw new Error("A PerformanceTimer instance must be provided.");
   }
@@ -328,8 +328,12 @@ self.wasmProcessImage = async function(imageData, op, params, ctx, timer) {
     const resultImageData = ctx.createImageData(dst.cols, dst.rows);
     // 修复：直接从 dst.data 设置数据，之前的参数是错误的
     resultImageData.data.set(dst.data);
-    ctx.putImageData(resultImageData, 0, 0);
-    timer.step('render_to_offscreen');
+    
+    // 新增：如果有skipRendering标记，跳过绘制到canvas
+    if (!skipRendering) {
+      ctx.putImageData(resultImageData, 0, 0);
+      timer.step('render_to_offscreen');
+    }
 
     // 将 ImageData 返回，以便 worker 可以将其发送回主线程用于历史记录
     return resultImageData;

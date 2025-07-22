@@ -166,12 +166,23 @@ self.onmessage = async (e) => {
                     // 由于 JS 方案不经过 Wasm，需要手动渲染
                     ctx.canvas.width = resultImageData.width;
                     ctx.canvas.height = resultImageData.height;
-                    ctx.putImageData(resultImageData, 0, 0);
-                    timer.step('render_to_offscreen');
+                    
+                    // 新增：如果有skipRendering标记，跳过绘制到canvas
+                    if (!payload.skipRendering) {
+                        ctx.putImageData(resultImageData, 0, 0);
+                        timer.step('render_to_offscreen');
+                    }
 
                 } else {
                     // 对于所有其他操作，使用 WebAssembly
-                    resultImageData = await self.wasmProcessImage(payload.imageData, payload.action, payload.params, ctx, timer);
+                    resultImageData = await self.wasmProcessImage(
+                        payload.imageData, 
+                        payload.action, 
+                        payload.params, 
+                        ctx, 
+                        timer, 
+                        payload.skipRendering // 传递skipRendering参数给wasmProcessImage
+                    );
                 }
 
                 timer.step('image_processed_in_worker');
