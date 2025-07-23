@@ -1,7 +1,8 @@
 import React from 'react';
 import {
   Sun, Contrast, Droplets, Palette, SlidersHorizontal,
-  Crop, RotateCw, RotateCcw, FlipHorizontal, FlipVertical, Wand2
+  Crop, RotateCw, RotateCcw, FlipHorizontal, FlipVertical, Wand2,
+  Aperture, SquarePen, Eclipse, History // 替换字母图标
 } from 'lucide-react';
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
@@ -10,8 +11,8 @@ import useImageProcessing from '../../hooks/useImageProcessing';
 import ToolButton from '../common/ToolButton';
 
 const Toolbar = () => {
-  const { image } = useImageStore();
-  const { activeTool, setActiveTool, toggleCropMode, loading } = useEditorStore();
+  const { image, getCurrentImageData } = useImageStore();
+  const { activeTool, setActiveTool, setStagedImage, toggleCropMode, loading } = useEditorStore();
   const { processEdit } = useImageProcessing();
 
   // 工具激活处理
@@ -21,14 +22,26 @@ const Toolbar = () => {
       return;
     }
 
-    // 如果再次点击同一个工具图标，则取消操作
+    // 如果再次点击同一个工具图标，则取消操作，并恢复暂存的图像
     if (activeTool === toolName) {
+      const { stagedImage, imageWorker } = useEditorStore.getState();
+      if (stagedImage && imageWorker) {
+        imageWorker.postMessage({ type: 'image-process', payload: { imageData: stagedImage, action: 'original', isHistoryNavigation: true } });
+      }
       setActiveTool(null);
+      setStagedImage(null);
       return;
     }
 
-    // 设置工具和参数
+    // 暂存当前图像状态
+    const currentState = getCurrentImageData();
+    setStagedImage(currentState);
+
+    // 设置新工具并立即应用一次默认效果作为预览
     setActiveTool(toolName, defaultParams);
+    if (currentState && Object.keys(defaultParams).length > 0) {
+      processEdit(toolName, defaultParams, true);
+    }
   };
 
   // 裁剪工具处理
@@ -107,7 +120,7 @@ const Toolbar = () => {
           disabled={!image || loading}
         />
         <ToolButton 
-          icon="B" // 文本作为图标
+          icon={<Aperture size={20} />}
           title="模糊"
           variant="group"
           isActive={activeTool === 'blur'}
@@ -115,14 +128,14 @@ const Toolbar = () => {
           disabled={!image || loading}
         />
         <ToolButton 
-          icon="C" // 文本作为图标
+          icon={<SquarePen size={20} />}
           title="边缘检测"
           variant="group"
           onClick={() => handleDirectEffect('canny')}
           disabled={!image || loading}
         />
         <ToolButton 
-          icon="T" // 文本作为图标
+          icon={<Eclipse size={20} />}
           title="阈值"
           variant="group"
           onClick={() => handleDirectEffect('threshold')}
@@ -136,7 +149,7 @@ const Toolbar = () => {
           disabled={!image || loading}
         />
         <ToolButton 
-          icon="S" // 文本作为图标
+          icon={<History size={20} />}
           title="复古"
           variant="group"
           onClick={() => handleDirectEffect('sepia')}

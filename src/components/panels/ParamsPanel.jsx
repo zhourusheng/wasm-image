@@ -65,7 +65,7 @@ const ColorBalanceControls = ({ params, onChange }) => (
       max="100"
       step="1"
       value={params.red || 0}
-      onChange={(value) => onChange({ ...params, red: value })}
+      onChange={(value) => onChange({ red: value })} // 修复：只传递变化的参数
     />
     <Slider
       id="green"
@@ -74,7 +74,7 @@ const ColorBalanceControls = ({ params, onChange }) => (
       max="100"
       step="1"
       value={params.green || 0}
-      onChange={(value) => onChange({ ...params, green: value })}
+      onChange={(value) => onChange({ green: value })} // 修复：只传递变化的参数
     />
     <Slider
       id="blue"
@@ -83,7 +83,7 @@ const ColorBalanceControls = ({ params, onChange }) => (
       max="100"
       step="1"
       value={params.blue || 0}
-      onChange={(value) => onChange({ ...params, blue: value })}
+      onChange={(value) => onChange({ blue: value })} // 修复：只传递变化的参数
     />
   </div>
 );
@@ -149,7 +149,7 @@ const CompressControls = ({ params, onChange }) => (
 );
 
 const ParamsPanel = () => {
-  const { activeTool, toolParams, updateToolParams, clearActiveTool } = useEditorStore();
+  const { activeTool, toolParams, stagedImage, imageWorker, updateToolParams, clearActiveTool } = useEditorStore();
   const { processEdit } = useImageProcessing();
 
   if (!activeTool) return null;
@@ -176,8 +176,9 @@ const ParamsPanel = () => {
 
   // 参数变更处理
   const handleParamsChange = (newParams) => {
-    updateToolParams(newParams);
-    processEdit(activeTool, { ...toolParams, ...newParams }, true);
+    const updatedParams = { ...toolParams, ...newParams };
+    updateToolParams(updatedParams);
+    processEdit(activeTool, updatedParams, true);
   };
 
   // 压缩参数变更处理
@@ -200,6 +201,17 @@ const ParamsPanel = () => {
 
   // 取消工具
   const handleCancelTool = () => {
+    // 恢复到进入工具前的状态
+    if (stagedImage && imageWorker) {
+      imageWorker.postMessage({ 
+        type: 'image-process', 
+        payload: { 
+          imageData: stagedImage, 
+          action: 'original', 
+          isHistoryNavigation: true 
+        } 
+      });
+    }
     clearActiveTool();
   };
 
