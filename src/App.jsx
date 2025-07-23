@@ -101,7 +101,7 @@ function App() {
   // 新增：拼接模式相关状态
   const [isCollageMode, setIsCollageMode] = useState(false);
   const [initialCollageImage, setInitialCollageImage] = useState(null);
-  const isExitingCollage = useRef(false); // 新增：用于防止重复处理的标志
+  const justExitedCollageMode = useRef(false);
 
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
@@ -228,12 +228,30 @@ function App() {
     };
   }, []); // 空依赖数组确保此 effect 仅在挂载时运行一次
 
+  // 新增 Effect: 用于在退出拼图模式后，重新初始化 Worker 的 Canvas
+  useEffect(() => {
+    // 当我们刚刚退出拼图模式时，执行此 effect
+    if (justExitedCollageMode.current && !isCollageMode && workerReady && canvasRef.current) {
+      // 立即重置标志，防止无限循环
+      justExitedCollageMode.current = false;
+
+      const lastState = historyManager.getCurrentState();
+      if (lastState) {
+        console.log("检测到退出拼图模式，正在重新初始化并重绘 Canvas...");
+        setLoading(true);
+        const offscreen = canvasRef.current.transferControlToOffscreen();
+        imageWorker.current.postMessage({ type: 'init', payload: { canvas: offscreen } }, [offscreen]);
+        imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: lastState, action: 'original', isHistoryNavigation: true } });
+      }
+    }
+  }, [isCollageMode, workerReady]);
+
+
   // 用于处理新图像加载的 effect
   useEffect(() => {
     // 修复：如果正在从拼接模式退出，我们已经手动处理了，所以跳过这个 effect
-    if (isExitingCollage.current) {
-      isExitingCollage.current = false; // 重置标志
-      return;
+    if (justExitedCollageMode.current) {
+      return; // 退出拼图模式的逻辑由上面的 effect 处理
     }
 
     if (image && workerReady) {
@@ -326,11 +344,18 @@ function App() {
   };
 
   const handleExitCollageMode = (newImageData) => {
+    // 如果没有拼接结果，说明是取消操作
+    if (!newImageData) {
+      // 设置标志，让 useEffect 来处理后续的重绘逻辑
+      justExitedCollageMode.current = true;
+    }
+
     setIsCollageMode(false);
     setInitialCollageImage(null);
     
-    // 如果没有拼接结果，就直接退出
-    if (!newImageData) return;
+    if (!newImageData) {
+      return; // 后续逻辑由 useEffect 处理
+    }
     
     // 设置加载状态
     setLoading(true);
