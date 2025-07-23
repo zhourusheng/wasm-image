@@ -1,16 +1,14 @@
 import React from 'react';
-import Slider from '../common/Slider';
+import { Slider } from 'antd';
 import useEditorStore from '../../store/editorStore';
 import useImageProcessing from '../../hooks/useImageProcessing';
 
 // 亮度控制面板
 const BrightnessControls = ({ params, onChange }) => (
   <Slider
-    id="delta"
-    label="亮度"
-    min="-100"
-    max="100"
-    step="1"
+    min={-100} // 修复：字符串改为数字
+    max={100}  // 修复：字符串改为数字
+    step={1}   // 修复：字符串改为数字
     value={params.delta || 0}
     onChange={(value) => onChange({ delta: value })}
   />
@@ -19,11 +17,9 @@ const BrightnessControls = ({ params, onChange }) => (
 // 对比度控制面板
 const ContrastControls = ({ params, onChange }) => (
   <Slider
-    id="factor"
-    label="对比度"
-    min="0.1"
-    max="3"
-    step="0.1"
+    min={0.1} // 修复：字符串改为数字
+    max={3}   // 修复：字符串改为数字
+    step={0.1} // 修复：字符串改为数字
     value={params.factor || 1}
     onChange={(value) => onChange({ factor: value })}
   />
@@ -32,11 +28,9 @@ const ContrastControls = ({ params, onChange }) => (
 // 饱和度控制面板
 const SaturationControls = ({ params, onChange }) => (
   <Slider
-    id="factor"
-    label="饱和度"
-    min="0"
-    max="3"
-    step="0.1"
+    min={0}   // 修复：字符串改为数字
+    max={3}   // 修复：字符串改为数字
+    step={0.1} // 修复：字符串改为数字
     value={params.factor || 1}
     onChange={(value) => onChange({ factor: value })}
   />
@@ -45,11 +39,9 @@ const SaturationControls = ({ params, onChange }) => (
 // 模糊控制面板
 const BlurControls = ({ params, onChange }) => (
   <Slider
-    id="ksize"
-    label="模糊半径"
-    min="1"
-    max="21"
-    step="2"
+    min={1}   // 修复：字符串改为数字
+    max={21}  // 修复：字符串改为数字
+    step={2}  // 修复：字符串改为数字
     value={params.ksize || 5}
     onChange={(value) => onChange({ ksize: value })}
   />
@@ -58,59 +50,28 @@ const BlurControls = ({ params, onChange }) => (
 // 色彩平衡控制面板
 const ColorBalanceControls = ({ params, onChange }) => (
   <div className="space-y-4">
-    <Slider
-      id="red"
-      label="红色"
-      min="-100"
-      max="100"
-      step="1"
-      value={params.red || 0}
-      onChange={(value) => onChange({ red: value })} // 修复：只传递变化的参数
-    />
-    <Slider
-      id="green"
-      label="绿色"
-      min="-100"
-      max="100"
-      step="1"
-      value={params.green || 0}
-      onChange={(value) => onChange({ green: value })} // 修复：只传递变化的参数
-    />
-    <Slider
-      id="blue"
-      label="蓝色"
-      min="-100"
-      max="100"
-      step="1"
-      value={params.blue || 0}
-      onChange={(value) => onChange({ blue: value })} // 修复：只传递变化的参数
-    />
+    <div className="text-sm font-medium text-red-500">红色: {params.red || 0}</div>
+    <Slider min={-100} max={100} step={1} value={params.red || 0} onChange={(val) => onChange({ red: val })} />
+    
+    <div className="text-sm font-medium text-green-500">绿色: {params.green || 0}</div>
+    <Slider min={-100} max={100} step={1} value={params.green || 0} onChange={(val) => onChange({ green: val })} />
+    
+    <div className="text-sm font-medium text-blue-500">蓝色: {params.blue || 0}</div>
+    <Slider min={-100} max={100} step={1} value={params.blue || 0} onChange={(val) => onChange({ blue: val })} />
   </div>
 );
 
 // 压缩控制面板
 const CompressControls = ({ params, onChange }) => (
   <div className="space-y-4">
-    <Slider
-      id="quality"
-      label="压缩质量"
-      min="0.1"
-      max="1"
-      step="0.1"
-      value={params.quality || 0.8}
-      onChange={(value) => onChange({ ...params, quality: value })}
-      displayFunc={(value) => `${Math.round(value * 100)}%`}
-    />
-    <Slider
-      id="scale"
-      label="调整大小"
-      min="0.1"
-      max="1"
-      step="0.1"
-      value={params.scale || 1}
-      onChange={(value) => onChange({ ...params, scale: value })}
-      displayFunc={(value) => `${Math.round(value * 100)}%`}
-    />
+    <div>
+      <label className="text-sm font-medium">压缩质量: {Math.round((params.quality || 0.8) * 100)}%</label>
+      <Slider min={0.1} max={1} step={0.1} value={params.quality || 0.8} onChange={(val) => onChange({ ...params, quality: val })} />
+    </div>
+    <div>
+      <label className="text-sm font-medium">调整大小: {Math.round((params.scale || 1) * 100)}%</label>
+      <Slider min={0.1} max={1} step={0.1} value={params.scale || 1} onChange={(val) => onChange({ ...params, scale: val })} />
+    </div>
     
     <div className="space-y-2">
       <label className="text-sm font-medium">图片格式</label>

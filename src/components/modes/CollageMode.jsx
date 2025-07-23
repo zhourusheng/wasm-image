@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { Slider, Button, Tooltip } from 'antd'; // 引入 Tooltip
 import useCollageStore from '../../store/collageStore';
 import useEditorStore from '../../store/editorStore';
 import useImageStore from '../../store/imageStore';
@@ -7,7 +8,6 @@ import useImageProcessing from '../../hooks/useImageProcessing';
 import { getImageDataFromImage } from '../../utils/imageUtils';
 import ToolButton from '../common/ToolButton';
 import LoadingOverlay from '../common/LoadingOverlay';
-import Slider from '../common/Slider';
 
 const CanvasPreview = ({ imageData }) => {
   const canvasRef = useRef(null);
@@ -105,24 +105,15 @@ const CollageMode = () => {
           <div>
             <label className="font-medium">布局</label>
             <div className="grid grid-cols-3 gap-2 mt-2">
-              <ToolButton 
-                icon="垂直"
-                title="垂直布局"
-                onClick={() => setLayout('vertical')}
-                isActive={layout === 'vertical'}
-              />
-              <ToolButton 
-                icon="水平"
-                title="水平布局"
-                onClick={() => setLayout('horizontal')}
-                isActive={layout === 'horizontal'}
-              />
-              <ToolButton 
-                icon="网格"
-                title="网格布局"
-                onClick={() => setLayout('grid')}
-                isActive={layout === 'grid'}
-              />
+              <Tooltip title="垂直布局">
+                <Button onClick={() => setLayout('vertical')} type={layout === 'vertical' ? 'primary' : 'default'}>垂直</Button>
+              </Tooltip>
+              <Tooltip title="水平布局">
+                <Button onClick={() => setLayout('horizontal')} type={layout === 'horizontal' ? 'primary' : 'default'}>水平</Button>
+              </Tooltip>
+              <Tooltip title="网格布局">
+                <Button onClick={() => setLayout('grid')} type={layout === 'grid' ? 'primary' : 'default'}>网格</Button>
+              </Tooltip>
             </div>
           </div>
           
@@ -140,15 +131,10 @@ const CollageMode = () => {
             </div>
           )}
 
-          <Slider
-            id="gap"
-            label={`间距 (${options.gap}px)`}
-            min={0}
-            max={100}
-            step={1}
-            value={options.gap}
-            onChange={(value) => updateOptions({ gap: value })}
-          />
+          <div className="space-y-2">
+            <label className="text-sm font-medium">间距: {options.gap}px</label>
+            <Slider min={0} max={100} step={1} value={options.gap} onChange={(val) => updateOptions({ gap: val })} />
+          </div>
 
           <div>
             <label htmlFor="bgColor" className="font-medium">背景色</label>
@@ -193,19 +179,10 @@ const CollageMode = () => {
         </div>
 
         <div className="mt-auto pt-4 space-x-2 flex">
-          <button 
-            onClick={handleExit} 
-            className="flex-1 py-2 rounded bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500"
-          >
-            取消
-          </button>
-          <button 
-            onClick={handleApply} 
-            className="flex-1 py-2 rounded bg-green-500 text-white hover:bg-green-600" 
-            disabled={!previewData || loading}
-          >
+          <Button block onClick={handleExit}>取消</Button>
+          <Button block type="primary" onClick={handleApply} disabled={!previewData || loading} loading={loading}>
             {loading ? '生成中...' : '应用'}
-          </button>
+          </Button>
         </div>
       </aside>
       

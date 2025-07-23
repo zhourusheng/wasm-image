@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { ImagePlay, Folder, Copy, GripVertical, FileOutput } from 'lucide-react';
+import { Button, Tooltip } from 'antd'; // 引入 Tooltip
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
@@ -92,18 +93,18 @@ const Header = () => {
               className="hidden"
               accept="image/png, image/jpeg, image/webp"
             />
-            <button className="icon-btn" onClick={handleUploadClick} title="打开文件">
-              <Folder size={20} />
-            </button>
-            <button className="icon-btn" onClick={handleCopyClick} title="复制图像" disabled={!image || loading}>
-              <Copy size={20} />
-            </button>
-            <button className="icon-btn" onClick={handleEnterCollageMode} disabled={loading} title="图片拼接">
-              <GripVertical size={20} />
-            </button>
-            <button className="icon-btn" onClick={openExportPanel} title="导出图像" disabled={!image || loading}>
-              <FileOutput size={20} />
-            </button>
+            <Tooltip title="打开文件">
+              <Button type="text" icon={<Folder size={20} />} onClick={handleUploadClick} />
+            </Tooltip>
+            <Tooltip title="复制图像">
+              <Button type="text" icon={<Copy size={20} />} onClick={handleCopyClick} disabled={!image || loading} />
+            </Tooltip>
+            <Tooltip title="图片拼接">
+              <Button type="text" icon={<GripVertical size={20} />} onClick={handleEnterCollageMode} disabled={loading} />
+            </Tooltip>
+            <Tooltip title="导出图像">
+              <Button type="text" icon={<FileOutput size={20} />} onClick={openExportPanel} disabled={!image || loading} />
+            </Tooltip>
           </>
         ) : (
           <h2 className="font-semibold text-lg text-blue-500">拼图模式</h2>

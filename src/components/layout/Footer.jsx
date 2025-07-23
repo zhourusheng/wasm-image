@@ -1,42 +1,26 @@
 import React from 'react';
-import { ZoomIn, ZoomOut, Eye } from 'lucide-react';
+import { ZoomInOutlined, ZoomOutOutlined, EyeOutlined, CompressOutlined, OneToOneOutlined } from '@ant-design/icons';
+import { Button, Tooltip } from 'antd';
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
 import useZoom from '../../hooks/useZoom';
 
-const Footer = ({ containerRef }) => { // 接收 ref
+const Footer = ({ containerRef }) => {
   const { image, imageSize, originalImage, originalFileInfo, getCurrentImageData } = useImageStore();
   const { imageWorker, loading } = useEditorStore();
   const { zoom } = useUiStore();
-  const { handleManualZoom, resetToFitZoom, resetToOriginalZoom } = useZoom(containerRef); // 传递 ref
+  const { handleManualZoom, resetToFitZoom, resetToOriginalZoom } = useZoom(containerRef);
 
-  // 原图对比功能
   const handleCompareStart = () => {
     if (!originalImage || loading) return;
-    // 发送原始图像用于预览，标记为历史导航以避免存入历史记录
-    imageWorker.postMessage({ 
-      type: 'image-process', 
-      payload: { 
-        imageData: originalImage, 
-        action: 'original', 
-        isHistoryNavigation: true 
-      } 
-    });
+    imageWorker.postMessage({ type: 'image-process', payload: { imageData: originalImage, action: 'original', isHistoryNavigation: true } });
   };
 
   const handleCompareEnd = () => {
     const currentState = getCurrentImageData();
     if (!currentState || loading) return;
-    // 发送当前最新的编辑状态用于预览，恢复视图
-    imageWorker.postMessage({ 
-      type: 'image-process', 
-      payload: { 
-        imageData: currentState, 
-        action: 'original', 
-        isHistoryNavigation: true 
-      } 
-    });
+    imageWorker.postMessage({ type: 'image-process', payload: { imageData: currentState, action: 'original', isHistoryNavigation: true } });
   };
 
   return (
@@ -51,38 +35,28 @@ const Footer = ({ containerRef }) => { // 接收 ref
       </div>
       {image && (
         <div className="absolute right-4 flex items-center space-x-2">
-          <button 
-            className="icon-btn"
-            title="适应屏幕"
-            onClick={resetToFitZoom}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M3 3h6v6M21 21h-6v-6"/></svg>
-          </button>
-          <button 
-            className="icon-btn"
-            title="实际尺寸 (100%)"
-            onClick={resetToOriginalZoom}
-          >
-            <span className="font-semibold text-sm">1:1</span>
-          </button>
+          <Tooltip title="适应屏幕">
+            <Button type="text" icon={<CompressOutlined />} onClick={resetToFitZoom} />
+          </Tooltip>
+          <Tooltip title="实际尺寸 (100%)">
+            <Button type="text" icon={<OneToOneOutlined />} onClick={resetToOriginalZoom} />
+          </Tooltip>
           
           <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
 
-          <button 
-            className="icon-btn"
-            title="按住查看原图"
-            onMouseDown={handleCompareStart}
-            onMouseUp={handleCompareEnd}
-            onMouseLeave={handleCompareEnd}
-          >
-            <Eye size={18} />
-          </button>
+          <Tooltip title="按住查看原图">
+            <Button 
+              type="text" 
+              icon={<EyeOutlined />}
+              onMouseDown={handleCompareStart}
+              onMouseUp={handleCompareEnd}
+              onMouseLeave={handleCompareEnd}
+            />
+          </Tooltip>
           
           <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
 
-          <button className="icon-btn" onClick={() => handleManualZoom(zoom - 0.1)}>
-            <ZoomOut size={18} />
-          </button>
+          <Button type="text" icon={<ZoomOutOutlined />} onClick={() => handleManualZoom(zoom - 0.1)} />
           <span 
             className="w-16 text-center" 
             onDoubleClick={resetToOriginalZoom} 
@@ -90,9 +64,7 @@ const Footer = ({ containerRef }) => { // 接收 ref
           >
             {`${Math.round(zoom * 100)}%`}
           </span>
-          <button className="icon-btn" onClick={() => handleManualZoom(zoom + 0.1)}>
-            <ZoomIn size={18} />
-          </button>
+          <Button type="text" icon={<ZoomInOutlined />} onClick={() => handleManualZoom(zoom + 0.1)} />
         </div>
       )}
     </footer>

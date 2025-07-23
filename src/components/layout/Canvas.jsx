@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Check, X, Undo, Redo, Trash2 } from 'lucide-react';
+import { Button, Tooltip } from 'antd'; // 引入 antd 组件
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
@@ -21,12 +22,12 @@ const EmptyStatePrompt = () => (
 
 const CropControls = ({ onConfirm, onCancel }) => (
   <div className="flex items-center space-x-2">
-    <button className="icon-btn text-green-500" onClick={onConfirm} title="确认">
-      <Check size={20} />
-    </button>
-    <button className="icon-btn text-red-500" onClick={onCancel} title="取消">
-      <X size={20} />
-    </button>
+    <Tooltip title="确认">
+      <Button type="text" icon={<Check size={20} />} onClick={onConfirm} className="text-green-500" />
+    </Tooltip>
+    <Tooltip title="取消">
+      <Button type="text" icon={<X size={20} />} onClick={onCancel} className="text-red-500" />
+    </Tooltip>
   </div>
 );
 
@@ -187,15 +188,15 @@ const Canvas = ({ containerRef }) => { // 接收 ref
       {/* 主内容顶部栏 */}
       <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-2">
-          <button className="icon-btn" onClick={handleUndo} disabled={!canUndo() || loading} title="撤销">
-            <Undo size={20} />
-          </button>
-          <button className="icon-btn" onClick={handleRedo} disabled={!canRedo() || loading} title="重做">
-            <Redo size={20} />
-          </button>
-          <button className="icon-btn" onClick={handleRevertToOriginal} disabled={!image || loading} title="重置所有操作">
-            <Trash2 size={20} />
-          </button>
+          <Tooltip title="撤销">
+            <Button type="text" icon={<Undo size={20} />} onClick={handleUndo} disabled={!canUndo() || loading} />
+          </Tooltip>
+          <Tooltip title="重做">
+            <Button type="text" icon={<Redo size={20} />} onClick={handleRedo} disabled={!canRedo() || loading} />
+          </Tooltip>
+          <Tooltip title="重置所有操作">
+            <Button type="text" icon={<Trash2 size={20} />} onClick={handleRevertToOriginal} disabled={!image || loading} />
+          </Tooltip>
         </div>
         
         {isCropMode && <CropControls onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
