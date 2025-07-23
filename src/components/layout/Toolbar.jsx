@@ -1,0 +1,192 @@
+import React from 'react';
+import {
+  Sun, Contrast, Droplets, Palette, SlidersHorizontal,
+  Crop, RotateCw, RotateCcw, FlipHorizontal, FlipVertical, Wand2
+} from 'lucide-react';
+import useImageStore from '../../store/imageStore';
+import useEditorStore from '../../store/editorStore';
+import useUiStore from '../../store/uiStore';
+import useImageProcessing from '../../hooks/useImageProcessing';
+import ToolButton from '../common/ToolButton';
+
+const Toolbar = () => {
+  const { image } = useImageStore();
+  const { activeTool, setActiveTool, toggleCropMode, loading } = useEditorStore();
+  const { processEdit } = useImageProcessing();
+
+  // 工具激活处理
+  const handleToolActivate = (toolName, defaultParams = {}) => {
+    if (!image) {
+      alert('请先上传一张图片');
+      return;
+    }
+
+    // 如果再次点击同一个工具图标，则取消操作
+    if (activeTool === toolName) {
+      setActiveTool(null);
+      return;
+    }
+
+    // 设置工具和参数
+    setActiveTool(toolName, defaultParams);
+  };
+
+  // 裁剪工具处理
+  const handleCropModeToggle = () => {
+    if (!image) {
+      alert('请先上传一张图片');
+      return;
+    }
+    toggleCropMode();
+  };
+
+  // 直接应用效果（无需参数面板）的工具
+  const handleDirectEffect = (effect) => {
+    if (!image) {
+      alert('请先上传一张图片');
+      return;
+    }
+    processEdit(effect);
+  };
+
+  // 图像变换工具
+  const handleRotateCw = () => processEdit('rotate', { angle: 90 });
+  const handleRotateCcw = () => processEdit('rotate', { angle: -90 });
+  const handleFlipH = () => processEdit('flip', { mode: 0 });
+  const handleFlipV = () => processEdit('flip', { mode: 1 });
+
+  return (
+    <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-4 text-xs overflow-y-auto">
+      {/* 调整工具组 */}
+      <div className="flex flex-col items-center space-y-1 w-full">
+        <span className="font-medium text-gray-500">调整</span>
+        <ToolButton 
+          icon={<Sun size={20} />}
+          title="亮度"
+          variant="group"
+          isActive={activeTool === 'brightness'}
+          onClick={() => handleToolActivate('brightness', { delta: 0 })}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<Contrast size={20} />}
+          title="对比度"
+          variant="group"
+          isActive={activeTool === 'contrast'}
+          onClick={() => handleToolActivate('contrast', { factor: 1 })}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<Droplets size={20} />}
+          title="饱和度"
+          variant="group"
+          isActive={activeTool === 'saturation'}
+          onClick={() => handleToolActivate('saturation', { factor: 1 })}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<Palette size={20} />}
+          title="色彩平衡"
+          variant="group"
+          isActive={activeTool === 'colorBalance'}
+          onClick={() => handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })}
+          disabled={!image || loading}
+        />
+      </div>
+      
+      <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+      {/* 效果工具组 */}
+      <div className="flex flex-col items-center space-y-1 w-full">
+        <span className="font-medium text-gray-500">效果</span>
+        <ToolButton 
+          icon={<SlidersHorizontal size={20} />}
+          title="灰度"
+          variant="group"
+          onClick={() => handleDirectEffect('grayscale')}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon="B" // 文本作为图标
+          title="模糊"
+          variant="group"
+          isActive={activeTool === 'blur'}
+          onClick={() => handleToolActivate('blur', { ksize: 5 })}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon="C" // 文本作为图标
+          title="边缘检测"
+          variant="group"
+          onClick={() => handleDirectEffect('canny')}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon="T" // 文本作为图标
+          title="阈值"
+          variant="group"
+          onClick={() => handleDirectEffect('threshold')}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<Wand2 size={20} />}
+          title="浮雕"
+          variant="group"
+          onClick={() => handleDirectEffect('emboss')}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon="S" // 文本作为图标
+          title="复古"
+          variant="group"
+          onClick={() => handleDirectEffect('sepia')}
+          disabled={!image || loading}
+        />
+      </div>
+
+      <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+      {/* 变换工具组 */}
+      <div className="flex flex-col items-center space-y-1 w-full">
+        <span className="font-medium text-gray-500">变换</span>
+        <ToolButton 
+          icon={<Crop size={20} />}
+          title="裁剪"
+          variant="group"
+          onClick={handleCropModeToggle}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<RotateCw size={20} />}
+          title="顺时针旋转"
+          variant="group"
+          onClick={handleRotateCw}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<RotateCcw size={20} />}
+          title="逆时针旋转"
+          variant="group"
+          onClick={handleRotateCcw}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<FlipHorizontal size={20} />}
+          title="水平翻转"
+          variant="group"
+          onClick={handleFlipH}
+          disabled={!image || loading}
+        />
+        <ToolButton 
+          icon={<FlipVertical size={20} />}
+          title="垂直翻转"
+          variant="group"
+          onClick={handleFlipV}
+          disabled={!image || loading}
+        />
+      </div>
+    </aside>
+  );
+};
+
+export default Toolbar; 
