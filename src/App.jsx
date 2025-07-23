@@ -100,6 +100,7 @@ function App() {
 
   // 新增：拼接模式相关状态
   const [isCollageMode, setIsCollageMode] = useState(false);
+  const [initialCollageImage, setInitialCollageImage] = useState(null);
   const isExitingCollage = useRef(false); // 新增：用于防止重复处理的标志
 
   // 一个简单的触发重新渲染的方法
@@ -315,24 +316,18 @@ function App() {
       if (confirm('您想将当前编辑的图片添加到拼接中吗？')) {
         const currentImageData = historyManager.getCurrentState();
         // 我们将在进入模式后处理它
+        setInitialCollageImage(currentImageData);
         setIsCollageMode(true);
-        // 通过 useEffect 触发，传递当前图像
-        setTimeout(() => {
-          const collageInputElement = document.getElementById('collage-file-input');
-          if (collageInputElement) {
-            // 这部分有点hacky，理想情况下我们会有更好的状态管理
-            // 但为了简单起见，我们暂时这样做
-            window.initialCollageImage = currentImageData;
-          }
-        }, 0);
         return;
       }
     }
+    setInitialCollageImage(null);
     setIsCollageMode(true);
   };
 
   const handleExitCollageMode = (newImageData) => {
     setIsCollageMode(false);
+    setInitialCollageImage(null);
     
     // 如果没有拼接结果，就直接退出
     if (!newImageData) return;
@@ -1152,48 +1147,47 @@ function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* 左侧工具栏 */}
-        <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-4 text-xs overflow-y-auto">
-          {/* 调整 */}
-          <div className="flex flex-col items-center space-y-1 w-full">
-            <span className="font-medium text-gray-500">调整</span>
-            <button className={`icon-btn-group ${activeTool === 'brightness' ? 'active' : ''}`} onClick={() => handleToolActivate('brightness', { delta: 0 })} disabled={!image || loading} title="亮度"><Sun size={20} /></button>
-            <button className={`icon-btn-group ${activeTool === 'contrast' ? 'active' : ''}`} onClick={() => handleToolActivate('contrast', { factor: 1 })} disabled={!image || loading} title="对比度"><Contrast size={20} /></button>
-            <button className={`icon-btn-group ${activeTool === 'saturation' ? 'active' : ''}`} onClick={() => handleToolActivate('saturation', { factor: 1 })} disabled={!image || loading} title="饱和度"><Droplets size={20} /></button>
-             <button className={`icon-btn-group ${activeTool === 'colorBalance' ? 'active' : ''}`} onClick={() => handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })} disabled={!image || loading} title="色彩平衡"><Palette size={20} /></button>
-          </div>
-          
-          <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
-
-          {/* 效果 */}
-          <div className="flex flex-col items-center space-y-1 w-full">
-            <span className="font-medium text-gray-500">效果</span>
-            <button className="icon-btn-group" onClick={() => processEdit('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
-            <button className={`icon-btn-group ${activeTool === 'blur' ? 'active' : ''}`} onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
-            <button className="icon-btn-group" onClick={() => processEdit('canny')} disabled={!image || loading} title="边缘检测">C</button>
-            <button className="icon-btn-group" onClick={() => processEdit('threshold')} disabled={!image || loading} title="阈值">T</button>
-            <button className="icon-btn-group" onClick={() => processEdit('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
-            <button className="icon-btn-group" onClick={() => processEdit('sepia')} disabled={!image || loading} title="复古">S</button>
-          </div>
-
-          <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
-
-          {/* 变换 */}
-          <div className="flex flex-col items-center space-y-1 w-full">
-            <span className="font-medium text-gray-500">变换</span>
-            <button className="icon-btn-group" onClick={handleCropModeToggle} disabled={!image || loading} title="裁剪"><Crop size={20} /></button>
-            <button className="icon-btn-group" onClick={handleRotateCw} disabled={!image || loading} title="顺时针旋转"><RotateCw size={20} /></button>
-            <button className="icon-btn-group" onClick={handleRotateCcw} disabled={!image || loading} title="逆时针旋转"><RotateCcw size={20} /></button>
-            <button className="icon-btn-group" onClick={handleFlipH} disabled={!image || loading} title="水平翻转"><FlipHorizontal size={20} /></button>
-            <button className="icon-btn-group" onClick={handleFlipV} disabled={!image || loading} title="垂直翻转"><FlipVertical size={20} /></button>
-          </div>
-          
-        </aside>
-
         {isCollageMode ? (
-          <CollageModePanel onExit={handleExitCollageMode} />
+          <CollageModePanel onExit={handleExitCollageMode} initialImage={initialCollageImage} />
         ) : (
           <>
+            {/* 左侧工具栏 */}
+            <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-4 text-xs overflow-y-auto">
+              {/* 调整 */}
+              <div className="flex flex-col items-center space-y-1 w-full">
+                <span className="font-medium text-gray-500">调整</span>
+                <button className={`icon-btn-group ${activeTool === 'brightness' ? 'active' : ''}`} onClick={() => handleToolActivate('brightness', { delta: 0 })} disabled={!image || loading} title="亮度"><Sun size={20} /></button>
+                <button className={`icon-btn-group ${activeTool === 'contrast' ? 'active' : ''}`} onClick={() => handleToolActivate('contrast', { factor: 1 })} disabled={!image || loading} title="对比度"><Contrast size={20} /></button>
+                <button className={`icon-btn-group ${activeTool === 'saturation' ? 'active' : ''}`} onClick={() => handleToolActivate('saturation', { factor: 1 })} disabled={!image || loading} title="饱和度"><Droplets size={20} /></button>
+                 <button className={`icon-btn-group ${activeTool === 'colorBalance' ? 'active' : ''}`} onClick={() => handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })} disabled={!image || loading} title="色彩平衡"><Palette size={20} /></button>
+              </div>
+              
+              <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+              {/* 效果 */}
+              <div className="flex flex-col items-center space-y-1 w-full">
+                <span className="font-medium text-gray-500">效果</span>
+                <button className="icon-btn-group" onClick={() => processEdit('grayscale')} disabled={!image || loading} title="灰度"><SlidersHorizontal size={20} /></button>
+                <button className={`icon-btn-group ${activeTool === 'blur' ? 'active' : ''}`} onClick={() => handleToolActivate('blur', { ksize: 5 })} disabled={!image || loading} title="模糊">B</button>
+                <button className="icon-btn-group" onClick={() => processEdit('canny')} disabled={!image || loading} title="边缘检测">C</button>
+                <button className="icon-btn-group" onClick={() => processEdit('threshold')} disabled={!image || loading} title="阈值">T</button>
+                <button className="icon-btn-group" onClick={() => processEdit('emboss')} disabled={!image || loading} title="浮雕"><Wand2 size={20} /></button>
+                <button className="icon-btn-group" onClick={() => processEdit('sepia')} disabled={!image || loading} title="复古">S</button>
+              </div>
+
+              <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+              {/* 变换 */}
+              <div className="flex flex-col items-center space-y-1 w-full">
+                <span className="font-medium text-gray-500">变换</span>
+                <button className="icon-btn-group" onClick={handleCropModeToggle} disabled={!image || loading} title="裁剪"><Crop size={20} /></button>
+                <button className="icon-btn-group" onClick={handleRotateCw} disabled={!image || loading} title="顺时针旋转"><RotateCw size={20} /></button>
+                <button className="icon-btn-group" onClick={handleRotateCcw} disabled={!image || loading} title="逆时针旋转"><RotateCcw size={20} /></button>
+                <button className="icon-btn-group" onClick={handleFlipH} disabled={!image || loading} title="水平翻转"><FlipHorizontal size={20} /></button>
+                <button className="icon-btn-group" onClick={handleFlipV} disabled={!image || loading} title="垂直翻转"><FlipVertical size={20} /></button>
+              </div>
+            </aside>
+            
             {/* 主内容区和底部栏的包装器 */}
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* 主内容 - 关键修复：添加 min-h-0 允许内容区收缩 */}
@@ -1400,7 +1394,7 @@ function App() {
 }
 
 // 新增：拼接模式组件
-function CollageModePanel({ onExit }) {
+function CollageModePanel({ onExit, initialImage }) {
   const [images, setImages] = useState([]);
   const [layout, setLayout] = useState('vertical'); // 'vertical', 'horizontal', 'grid'
   const [options, setOptions] = useState({
@@ -1413,12 +1407,10 @@ function CollageModePanel({ onExit }) {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // 检查是否有从主编辑器传递过来的初始图片
-    if (window.initialCollageImage) {
-      setImages([window.initialCollageImage]);
-      delete window.initialCollageImage;
+    if (initialImage) {
+      setImages([initialImage]);
     }
-  }, []);
+  }, [initialImage]);
   
   // 当图片或选项变化时，重新生成预览
   useEffect(() => {
