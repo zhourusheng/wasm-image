@@ -102,6 +102,7 @@ function App() {
   const [isCollageMode, setIsCollageMode] = useState(false);
   const [initialCollageImage, setInitialCollageImage] = useState(null);
   const justExitedCollageMode = useRef(false);
+  const exitModeType = useRef(null); // 'cancel' 或 'apply'
 
   // 一个简单的触发重新渲染的方法
   const [, setTick] = useState(0);
@@ -230,42 +231,68 @@ function App() {
 
   // 新增 Effect: 用于在退出拼图模式后，重新初始化 Worker 的 Canvas
   useEffect(() => {
-    // 当我们刚刚退出拼图模式时，执行此 effect
-    if (justExitedCollageMode.current && !isCollageMode && workerReady && canvasRef.current) {
-      // 立即重置标志，防止无限循环
-      justExitedCollageMode.current = false;
-
+    // 这个 effect 在每次 isCollageMode 变化后都可能触发
+    // 我们只关心从 true -> false 的转变，且退出类型为 'cancel'
+    if (justExitedCollageMode.current && exitModeType.current === 'cancel' && !isCollageMode && workerReady && canvasRef.current) {
+      // 这是取消场景，用最后一个状态重绘
       const lastState = historyManager.getCurrentState();
       if (lastState) {
-        console.log("检测到退出拼图模式，正在重新初始化并重绘 Canvas...");
+        console.log("检测到退出拼图模式（取消），正在重新初始化并重绘 Canvas...");
         setLoading(true);
+
         const offscreen = canvasRef.current.transferControlToOffscreen();
         imageWorker.current.postMessage({ type: 'init', payload: { canvas: offscreen } }, [offscreen]);
         imageWorker.current.postMessage({ type: 'image-process', payload: { imageData: lastState, action: 'original', isHistoryNavigation: true } });
       }
+      // 不管有没有 lastState，都要消耗掉这个标志
+      justExitedCollageMode.current = false;
+      exitModeType.current = null;
     }
   }, [isCollageMode, workerReady]);
 
 
   // 用于处理新图像加载的 effect
   useEffect(() => {
-    // 修复：如果正在从拼接模式退出，我们已经手动处理了，所以跳过这个 effect
-    if (justExitedCollageMode.current) {
-      return; // 退出拼图模式的逻辑由上面的 effect 处理
+    // 常规文件上传，或从拼图模式应用新图
+    if (image && workerReady && !isCollageMode) {
+      // 如果是刚从拼图模式退出，且类型是"应用"，需要重新连接canvas
+      if (justExitedCollageMode.current && exitModeType.current === 'apply') {
+        console.log("检测到退出拼图模式（应用），正在处理新图像...");
+        if (!canvasRef.current) {
+          // 如果 canvas 还没准备好，稍等一下
+          setTimeout(() => {
+            if (canvasRef.current) {
+              const offscreen = canvasRef.current.transferControlToOffscreen();
+              imageWorker.current.postMessage({ type: 'init', payload: { canvas: offscreen } }, [offscreen]);
+              processNewImage(image);
+            }
+          }, 50);
+        } else {
+           const offscreen = canvasRef.current.transferControlToOffscreen();
+           imageWorker.current.postMessage({ type: 'init', payload: { canvas: offscreen } }, [offscreen]);
+           processNewImage(image);
+        }
+        // 消耗标志
+        justExitedCollageMode.current = false;
+        exitModeType.current = null;
+      } 
+      // 常规图像加载（文件上传）
+      else if (!justExitedCollageMode.current) {
+        processNewImage(image);
+      }
     }
-
-    if (image && workerReady) {
+    
+    function processNewImage(img) {
       setLoading(true);
-      setIsCanvasRendered(false); // 加载新图片时，先隐藏画布
-      const imageData = getImageDataFromImage(image);
-      originalImageRef.current = imageData; // 存储原始图像数据
+      setIsCanvasRendered(false);
+      const imageData = getImageDataFromImage(img);
+      originalImageRef.current = imageData;
       historyManager.clear();
       forceUpdate();
       imageWorker.current.postMessage({ type: 'image-process', payload: { imageData, action: 'original' } });
-      
-      // 重置用户缩放标记，这样新图片会使用自适应缩放
       setUserHasZoomed(false);
     }
+
   }, [image, workerReady]);
 
   const handleFileChange = useCallback(async (e) => {
@@ -349,97 +376,50 @@ function App() {
   const handleExitCollageMode = (newImageData) => {
     // 如果没有拼接结果，说明是取消操作
     if (!newImageData) {
-      // 设置标志，让 useEffect 来处理后续的重绘逻辑
+      // 标记为"取消"退出
       justExitedCollageMode.current = true;
+      exitModeType.current = 'cancel';
+      
+      setIsCollageMode(false);
+      setInitialCollageImage(null);
+      return;
     }
 
-    setIsCollageMode(false);
-    setInitialCollageImage(null);
-    
-    if (!newImageData) {
-      return; // 后续逻辑由 useEffect 处理
-    }
-    
-    // 设置加载状态
-    setLoading(true);
+    // 如果是应用，需要先处理图像数据
+    // 初始设置为null，稍后在onload回调中再设置为'apply'
+    exitModeType.current = null;
     
     try {
-      // 步骤1: 确保获得有效的ImageData
-      console.log("拼接结果数据:", newImageData.width, newImageData.height, newImageData.data.length);
-      
-      // 步骤2: 将ImageData转换为Blob URL
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = newImageData.width;
       tempCanvas.height = newImageData.height;
       const tempCtx = tempCanvas.getContext('2d');
       tempCtx.putImageData(newImageData, 0, 0);
-      
-      // 步骤3: 从Canvas创建一个新图像
+
       tempCanvas.toBlob((blob) => {
         if (!blob) {
           console.error("无法创建Blob");
           setLoading(false);
           return;
         }
-        
-        const blobUrl = URL.createObjectURL(blob);
+
+        // 使用 URL.createObjectURL(blob) 创建一个临时的 URL，然后加载到 Image 对象中
+        const newImageSrc = URL.createObjectURL(blob);
         const newImage = new Image();
         
         newImage.onload = () => {
-          console.log("新图像已加载", newImage.width, newImage.height);
+          // 标记我们即将退出并应用新图
+          justExitedCollageMode.current = true;
+          exitModeType.current = 'apply';
           
-          // 步骤4: 更新应用状态
-          setOriginalFileInfo({ size: blob.size, name: 'collage.png' });
-          setImageSize({ width: newImage.width, height: newImage.height });
-          
-          // 步骤5: 创建新的ImageData并存储为原始图像
-          const dataCanvas = document.createElement('canvas');
-          dataCanvas.width = newImage.width;
-          dataCanvas.height = newImage.height;
-          const dataCtx = dataCanvas.getContext('2d');
-          dataCtx.drawImage(newImage, 0, 0);
-          const finalImageData = dataCtx.getImageData(0, 0, newImage.width, newImage.height);
-          
-          // 步骤6: 使用这个新生成的ImageData来重置编辑历史
-          originalImageRef.current = finalImageData;
-          historyManager.clear();
-          historyManager.add(finalImageData);
-          
-          // 步骤7: 如果主Canvas已经准备好，直接绘制图像
-          if (canvasRef.current) {
-            const mainCtx = canvasRef.current.getContext('2d');
-            canvasRef.current.width = newImage.width;
-            canvasRef.current.height = newImage.height;
-            mainCtx.drawImage(newImage, 0, 0);
-          }
-          
-          // 步骤8: 通知Worker重置Canvas（但不处理图像，因为我们已经直接绘制了）
-          if (workerReady && imageWorker.current) {
-            // 将图像数据发送给Worker，让Worker知道有新图像
-            const workerData = new ImageData(
-              new Uint8ClampedArray(finalImageData.data),
-              finalImageData.width,
-              finalImageData.height
-            );
-            imageWorker.current.postMessage({
-              type: 'image-process',
-              payload: { 
-                imageData: workerData, 
-                action: 'original',
-                skipRendering: true // 告诉Worker不要重新渲染，因为我们已经处理了
-              }
-            }, [workerData.data.buffer]);
-          }
-          
-          // 步骤9: 更新UI状态
+          // 更新状态，这将触发上面的 useEffect 来处理图像
           setImage(newImage);
-          setUserHasZoomed(false);
-          setIsCanvasRendered(true);
-          setLoading(false);
-          forceUpdate();
+          setOriginalFileInfo({ size: blob.size, name: 'collage.png' });
+          setIsCollageMode(false);
+          setInitialCollageImage(null);
           
           // 清理
-          URL.revokeObjectURL(blobUrl);
+          URL.revokeObjectURL(newImageSrc);
         };
         
         newImage.onerror = (err) => {
@@ -447,10 +427,9 @@ function App() {
           setLoading(false);
           alert("无法加载拼接后的图像，请重试");
         };
-        
-        newImage.src = blobUrl;
+
+        newImage.src = newImageSrc;
       }, 'image/png');
-      
     } catch (error) {
       console.error("处理拼接图像时出错:", error);
       setLoading(false);
@@ -1296,6 +1275,11 @@ function App() {
               
               {/* 底部状态/工具栏 - 关键修复：添加 flex-shrink-0 防止被挤压 */}
               <footer className="h-10 flex-shrink-0 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm z-10 relative">
+                {image && (
+                  <div className="absolute left-4 text-gray-500 dark:text-gray-400 truncate max-w-xs" title={originalFileInfo.name}>
+                    <span>{originalFileInfo.name}</span>
+                  </div>
+                )}
                 <div className="text-center">
                   <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
                 </div>
