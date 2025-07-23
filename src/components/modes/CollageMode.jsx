@@ -1,13 +1,11 @@
 import React, { useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { Slider, Button, Tooltip } from 'antd'; // 引入 Tooltip
+import { Slider, Button, Tooltip, Spin } from 'antd'; // 引入 Tooltip
 import useCollageStore from '../../store/collageStore';
 import useEditorStore from '../../store/editorStore';
 import useImageStore from '../../store/imageStore';
 import useImageProcessing from '../../hooks/useImageProcessing';
 import { getImageDataFromImage } from '../../utils/imageUtils';
-import ToolButton from '../common/ToolButton';
-import LoadingOverlay from '../common/LoadingOverlay';
 
 const CanvasPreview = ({ imageData }) => {
   const canvasRef = useRef(null);
@@ -188,7 +186,11 @@ const CollageMode = () => {
       
       {/* 右侧预览区 */}
       <main className="flex-1 grid place-items-center p-4 overflow-auto relative">
-        {loading && <LoadingOverlay />}
+        {loading && (
+          <div className="absolute inset-0 bg-white/70 dark:bg-black/70 flex justify-center items-center z-10">
+            <Spin size="large" tip="正在生成预览..."/>
+          </div>
+        )}
         
         {previewData && !loading ? (
           <CanvasPreview imageData={previewData} />

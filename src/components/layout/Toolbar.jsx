@@ -16,7 +16,8 @@ const ToolButton = ({ icon, isActive, ...props }) => {
     <Button
       type={isActive ? 'primary' : 'text'}
       icon={icon}
-      className="!w-full !h-auto !flex !items-center !justify-center !p-2"
+      className="!w-12 !h-12 !p-0 !text-center"
+      style={{ lineHeight: '48px' }} // 48px is 3rem (h-12)
       {...props}
     />
   );
@@ -81,7 +82,7 @@ const Toolbar = () => {
   const handleFlipV = () => processEdit('flip', { mode: 1 });
 
   return (
-    <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-4 text-xs overflow-y-auto">
+    <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-2 text-xs overflow-y-auto">
       {/* 调整工具组 */}
       <div className="flex flex-col items-center space-y-1 w-full">
         <span className="font-medium text-gray-500">调整</span>
