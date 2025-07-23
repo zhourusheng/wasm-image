@@ -6,62 +6,49 @@ const useZoom = (canvasContainerRef) => {
   const { imageSize } = useImageStore();
   const { zoom, setZoom, fitZoom, setFitZoom, userHasZoomed, setUserHasZoomed } = useUiStore();
 
-  // 处理手动缩放
   const handleManualZoom = (newZoom) => {
     setZoom(newZoom);
     setUserHasZoomed(true);
   };
 
-  // 重置到适应屏幕的缩放
   const resetToFitZoom = () => {
     setZoom(fitZoom);
   };
 
-  // 重置到100%缩放
   const resetToOriginalZoom = () => {
     setZoom(1);
     setUserHasZoomed(true);
   };
 
-  // 初始计算适应缩放
+  // 统一使用 ResizeObserver 进行精确的缩放计算
   useEffect(() => {
-    if (!imageSize.width || !canvasContainerRef.current) return;
-
     const container = canvasContainerRef.current;
-    const containerWidth = container.clientWidth - 32;
-    const containerHeight = container.clientHeight - 32;
-    const scaleX = containerWidth / imageSize.width;
-    const scaleY = containerHeight / imageSize.height;
-    const newFitZoom = Math.min(scaleX, scaleY);
-
-    setFitZoom(newFitZoom);
-    
-    // 修复：仅在首次加载图片且用户未手动缩放时应用自适应缩放
-    if (!userHasZoomed) {
-      setZoom(newFitZoom); // 设置初始的适应缩放
-    }
-  }, [imageSize, userHasZoomed, canvasContainerRef, setFitZoom, setZoom]);
-
-  // 监听容器大小变化，更新适应缩放
-  useEffect(() => {
-    if (!canvasContainerRef.current) return;
+    if (!container) return;
 
     const observer = new ResizeObserver(entries => {
       const entry = entries[0];
       if (entry && imageSize.width > 0) {
-        const { width, height } = entry.contentRect;
-        const containerWidth = width - 32;
-        const containerHeight = height - 32;
+        // 使用 contentRect 可以精确获取内容区域的尺寸，无需手动减去 padding
+        const { width: containerWidth, height: containerHeight } = entry.contentRect;
+        
         const scaleX = containerWidth / imageSize.width;
         const scaleY = containerHeight / imageSize.height;
         const newFitZoom = Math.min(scaleX, scaleY);
+
+        // 始终更新 "fitZoom" 的值，供按钮使用
         setFitZoom(newFitZoom);
+        
+        // 仅当用户未手动缩放时，才自动应用适应屏幕的缩放
+        // 这会同时处理好初始加载和窗口尺寸变化两种情况
+        if (!userHasZoomed) {
+          setZoom(newFitZoom);
+        }
       }
     });
 
-    observer.observe(canvasContainerRef.current);
+    observer.observe(container);
     return () => observer.disconnect();
-  }, [imageSize, canvasContainerRef, setFitZoom]);
+  }, [imageSize, userHasZoomed, canvasContainerRef, setFitZoom, setZoom]);
 
   return {
     handleManualZoom,
