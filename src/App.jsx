@@ -14,7 +14,6 @@ function App() {
   const canvasContainerRef = useRef(null);
   const { handleWorkerMessage } = useImageProcessing();
   const { setImageWorker, activeTool, isCollageMode } = useEditorStore();
-  const { isExportPanelOpen } = useUiStore();
   
   useEffect(() => {
     const worker = new Worker(new URL('./workers/imageWorker.js', import.meta.url));
@@ -50,8 +49,10 @@ function App() {
         </div>
         
         {isCollageMode && <CollageMode />}
-        {isExportPanelOpen && <ExportPanel />}
       </div>
+      
+      {/* 导出面板作为弹窗 */}
+      <ExportPanel />
     </div>
   );
 }
