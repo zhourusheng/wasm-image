@@ -334,7 +334,10 @@ function App() {
       if (confirm('您想将当前编辑的图片添加到拼接中吗？')) {
         const currentImageData = historyManager.getCurrentState();
         // 我们将在进入模式后处理它
-        setInitialCollageImage(currentImageData);
+        setInitialCollageImage({
+          imageData: currentImageData,
+          name: originalFileInfo.name || `image-${Date.now()}.png`
+        });
         setIsCollageMode(true);
         return;
       }
@@ -1149,25 +1152,31 @@ function App() {
           <h1 className="font-semibold text-lg">Wasm 图像编辑器</h1>
         </div>
         <div className="flex items-center space-x-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            accept="image/png, image/jpeg, image/webp"
-          />
-          <button className="icon-btn" onClick={handleUploadClick} title="打开文件">
-            <Folder size={20} />
-          </button>
-          <button className="icon-btn" onClick={handleCopyClick} title="复制图像">
-            <Copy size={20} />
-          </button>
-          <button className="icon-btn" onClick={handleEnterCollageMode} disabled={loading} title="图片拼接">
-            <GripVertical size={20} />
-          </button>
-          <button className="icon-btn" onClick={handleOpenExportPanel} title="导出图像">
-            <FileOutput size={20} />
-          </button>
+          {!isCollageMode ? (
+            <>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept="image/png, image/jpeg, image/webp"
+              />
+              <button className="icon-btn" onClick={handleUploadClick} title="打开文件">
+                <Folder size={20} />
+              </button>
+              <button className="icon-btn" onClick={handleCopyClick} title="复制图像">
+                <Copy size={20} />
+              </button>
+              <button className="icon-btn" onClick={handleEnterCollageMode} disabled={loading} title="图片拼接">
+                <GripVertical size={20} />
+              </button>
+              <button className="icon-btn" onClick={handleOpenExportPanel} title="导出图像">
+                <FileOutput size={20} />
+              </button>
+            </>
+          ) : (
+            <h2 className="font-semibold text-lg text-blue-500">拼图模式</h2>
+          )}
         </div>
       </header>
 
@@ -1448,12 +1457,15 @@ function CollageModePanel({ onExit, initialImage }) {
       setLoading(true);
       try {
         let result;
+        // 从对象数组中提取ImageData
+        const imageDatas = images.map(img => img.imageData);
+
         if (layout === 'horizontal') {
-          result = createHorizontalCollage(images, options);
+          result = createHorizontalCollage(imageDatas, options);
         } else if (layout === 'vertical') {
-          result = createVerticalCollage(images, options);
+          result = createVerticalCollage(imageDatas, options);
         } else if (layout === 'grid') {
-          result = createGridCollage(images, options);
+          result = createGridCollage(imageDatas, options);
         }
         setPreviewData(result);
       } catch (error) {
@@ -1542,7 +1554,9 @@ function CollageModePanel({ onExit, initialImage }) {
           <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
             {images.map((img, index) => (
               <div key={index} className="flex items-center justify-between bg-gray-100 dark:bg-gray-700 p-2 rounded">
-                <span className="text-sm truncate">图片 {index + 1} ({img.width}x{img.height})</span>
+                <span className="text-sm truncate" title={img.name}>
+                  {img.name} ({img.imageData.width}x{img.imageData.height})
+                </span>
                 <button onClick={() => handleImageRemove(index)} className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 rounded-full">
                   <X size={16} />
                 </button>
