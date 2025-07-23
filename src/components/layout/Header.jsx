@@ -3,13 +3,15 @@ import { ImagePlay, Folder, Copy, GripVertical, FileOutput } from 'lucide-react'
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
+import useCollageStore from '../../store/collageStore';
 import useImageProcessing from '../../hooks/useImageProcessing';
-import { loadImageFromFile, getImageDataFromImage, copyImageToClipboard } from '../../utils/imageUtils';
+import { loadImageFromFile, copyImageToClipboard, getImageDataFromImage } from '../../utils/imageUtils';
 
 const Header = () => {
-  const { image, loadImage, setOriginalFileInfo } = useImageStore();
-  const { isCollageMode, setIsCollageMode, workerReady } = useEditorStore();
+  const { image, getCurrentImageData, originalFileInfo, setOriginalFileInfo, setImage } = useImageStore();
+  const { isCollageMode, setIsCollageMode } = useEditorStore();
   const { loading, openExportPanel } = useUiStore();
+  const { setInitialImage } = useCollageStore();
   const { processNewImage } = useImageProcessing();
   const fileInputRef = useRef(null);
 
@@ -22,27 +24,26 @@ const Header = () => {
     if (!file) return;
     
     try {
-      // 保存原始文件信息
+      // 1. 保存文件信息到 store
       setOriginalFileInfo({ size: file.size, name: file.name });
       
-      // 加载图片
+      // 2. 从文件加载图片对象
       const loadedImage = await loadImageFromFile(file);
       
-      // 获取ImageData
+      // 3. 将图片对象保存到 store 以更新UI
+      setImage(loadedImage);
+      
+      // 4. 从图片对象获取 ImageData
       const imageData = getImageDataFromImage(loadedImage);
-      
-      // 处理新图像
+
+      // 5. 将 ImageData 发送给 worker 处理
       processNewImage(imageData);
-      
-      // 更新UI状态 - 这一步必须在processNewImage之后
-      useImageStore.getState().setImage(loadedImage);
-      
+
     } catch (error) {
-      console.error(error);
-      alert(error.message);
+      console.error("文件加载失败:", error);
+      alert("加载图片失败: " + error.message);
     }
     
-    // 重置 input 以便可以再次选择相同的文件
     e.target.value = null;
   };
 
@@ -52,7 +53,6 @@ const Header = () => {
       alert('请先上传一张图片');
       return;
     }
-
     try {
       await copyImageToClipboard(canvas);
       alert('已复制到剪贴板！');
@@ -62,7 +62,17 @@ const Header = () => {
   };
 
   const handleEnterCollageMode = () => {
-    // 进入拼图模式
+    if (image) {
+      if (confirm('您想将当前编辑的图片添加到拼接中吗？')) {
+        const currentImageData = getCurrentImageData();
+        setInitialImage({
+          imageData: currentImageData,
+          name: originalFileInfo.name || `image-${Date.now()}.png`
+        });
+      } else {
+        setInitialImage(null);
+      }
+    }
     setIsCollageMode(true);
   };
 
@@ -85,13 +95,13 @@ const Header = () => {
             <button className="icon-btn" onClick={handleUploadClick} title="打开文件">
               <Folder size={20} />
             </button>
-            <button className="icon-btn" onClick={handleCopyClick} title="复制图像">
+            <button className="icon-btn" onClick={handleCopyClick} title="复制图像" disabled={!image || loading}>
               <Copy size={20} />
             </button>
             <button className="icon-btn" onClick={handleEnterCollageMode} disabled={loading} title="图片拼接">
               <GripVertical size={20} />
             </button>
-            <button className="icon-btn" onClick={openExportPanel} title="导出图像">
+            <button className="icon-btn" onClick={openExportPanel} title="导出图像" disabled={!image || loading}>
               <FileOutput size={20} />
             </button>
           </>

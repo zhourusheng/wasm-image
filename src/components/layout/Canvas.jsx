@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Check, X } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { Check, X, Undo, Redo, Trash2 } from 'lucide-react';
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
@@ -20,7 +20,7 @@ const EmptyStatePrompt = () => (
 );
 
 const CropControls = ({ onConfirm, onCancel }) => (
-  <div className="absolute top-2 right-2 flex items-center space-x-2 z-20">
+  <div className="flex items-center space-x-2">
     <button className="icon-btn text-green-500" onClick={onConfirm} title="确认">
       <Check size={20} />
     </button>
@@ -30,12 +30,17 @@ const CropControls = ({ onConfirm, onCancel }) => (
   </div>
 );
 
-const Canvas = () => {
+const Canvas = ({ containerRef }) => { // 接收 ref
   const { 
     image, 
     imageSize,
     getCurrentImageData,
-    historyManager
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    originalImage,
+    clearHistory,
   } = useImageStore();
   
   const { 
@@ -45,23 +50,21 @@ const Canvas = () => {
     imageWorker, 
     workerReady, 
     opencvLoaded, 
-    loading
+    loading,
+    clearActiveTool,
   } = useEditorStore();
 
-  const { isCanvasRendered, zoom } = useUiStore();
+  const { isCanvasRendered, zoom, setLoading, setUserHasZoomed } = useUiStore();
   const { processEdit } = useImageProcessing();
   
   const { 
     canvasRef, 
     cropCanvasRef, 
-    canvasContainerRef,
     handleCanvasMouseDown,
     handleCanvasMouseMove,
     handleCanvasMouseUp,
-    initCanvasOffscreen
-  } = useCanvas();
+  } = useCanvas(containerRef); // 传递 ref
 
-  // 初始化画布与Worker连接 - 修复：添加监听openCVLoaded状态
   useEffect(() => {
     if (canvasRef.current && imageWorker && opencvLoaded) {
       console.log("开始初始化Canvas与Worker连接");
@@ -71,7 +74,38 @@ const Canvas = () => {
         payload: { canvas: offscreen } 
       }, [offscreen]);
     }
-  }, [canvasRef.current, imageWorker, opencvLoaded]);
+  }, [canvasRef, imageWorker, opencvLoaded]);
+
+  // 历史记录操作
+  const handleUndo = () => {
+    if (!canUndo()) return;
+    const prevState = undo();
+    if (prevState && workerReady) {
+      setLoading(true);
+      imageWorker.postMessage({ type: 'image-process', payload: { imageData: prevState, action: 'original', isHistoryNavigation: true } });
+    }
+  };
+
+  const handleRedo = () => {
+    if (!canRedo()) return;
+    const nextState = redo();
+    if (nextState && workerReady) {
+      setLoading(true);
+      imageWorker.postMessage({ type: 'image-process', payload: { imageData: nextState, action: 'original', isHistoryNavigation: true } });
+    }
+  };
+
+  const handleRevertToOriginal = () => {
+    if (!originalImage || loading) return;
+
+    if (confirm('您确定要撤销所有操作，恢复到原始图像吗？')) {
+      setLoading(true);
+      clearActiveTool();
+      clearHistory();
+      setUserHasZoomed(false); // 修复：重置缩放状态
+      imageWorker.postMessage({ type: 'image-process', payload: { imageData: originalImage, action: 'original' } });
+    }
+  };
 
   // 裁剪相关
   const handleCropConfirm = () => {
@@ -80,7 +114,6 @@ const Canvas = () => {
       return;
     }
     
-    // 确保裁剪区域不超出画布边界
     const currentImageData = getCurrentImageData();
     if (!currentImageData) return;
 
@@ -91,10 +124,7 @@ const Canvas = () => {
       height: Math.round(Math.min(cropArea.height, currentImageData.height - Math.max(0, cropArea.y)))
     };
     
-    // 将裁剪任务发送给 Worker
     processEdit('crop', safeArea);
-    
-    // 退出裁剪模式
     toggleCropMode();
   };
   
@@ -112,97 +142,100 @@ const Canvas = () => {
     
     if (!currentImageData) return;
 
-    // 清除并重绘原始图像到裁剪画布
     cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
     cropCanvas.width = currentImageData.width;
     cropCanvas.height = currentImageData.height;
     cropCtx.putImageData(currentImageData, 0, 0);
 
-    if (!cropArea) return; // 如果没有裁剪区域，就只显示图像
+    if (!cropArea) return;
 
-    // 绘制半透明遮罩
     cropCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
     
-    // 清除裁剪区域的遮罩
     if (cropArea.width > 0 && cropArea.height > 0) {
       cropCtx.clearRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
     }
     
-    // 绘制裁剪边框
     cropCtx.strokeStyle = '#00ff00';
     cropCtx.lineWidth = 2;
     cropCtx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
     
   }, [cropArea, isCropMode, getCurrentImageData, cropCanvasRef]);
   
-  // 裁剪模式的样式调整
   useEffect(() => {
     const mainCanvas = canvasRef.current;
     const cropCanvas = cropCanvasRef.current;
     if (!mainCanvas || !cropCanvas) return;
 
     if (isCropMode) {
-      // 关键修复：获取主画布（可能被缩放）的视觉尺寸和位置
       const mainCanvasRect = mainCanvas.getBoundingClientRect();
-      // 获取裁剪画布的父容器（即画布区域的根div）的位置
       const parentRect = cropCanvas.parentElement.getBoundingClientRect();
 
-      // 将裁剪画布的CSS样式设置为与主画布的视觉大小和位置完全一致
       cropCanvas.style.width = `${mainCanvasRect.width}px`;
       cropCanvas.style.height = `${mainCanvasRect.height}px`;
       cropCanvas.style.top = `${mainCanvasRect.top - parentRect.top}px`;
       cropCanvas.style.left = `${mainCanvasRect.left - parentRect.left}px`;
       
-      // 修复：显示裁剪画布
       cropCanvas.style.display = 'block';
     } else {
       cropCanvas.style.display = 'none';
     }
-  }, [isCropMode, imageSize, canvasRef, cropCanvasRef]);
+  }, [isCropMode, imageSize, zoom, canvasRef, cropCanvasRef]);
 
   return (
-    <div 
-      ref={canvasContainerRef} 
-      className="flex-1 grid place-items-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative"
-    >
-      {loading && <LoadingOverlay />}
-      
-      <canvas 
-        id="canvas" 
-        ref={canvasRef} 
-        className={`shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
-        style={{
-          width: `${imageSize.width * zoom}px`,
-          height: `${imageSize.height * zoom}px`,
-        }}
-      ></canvas>
-      
-      <canvas
-        id="crop-canvas"
-        ref={cropCanvasRef}
-        className="absolute"
-        style={{ display: 'none' }}
-        onMouseDown={handleCanvasMouseDown}
-        onMouseMove={handleCanvasMouseMove}
-        onMouseUp={handleCanvasMouseUp}
-        onMouseLeave={handleCanvasMouseUp}
-      ></canvas>
-      
-      {isCropMode && (
-        <CropControls 
-          onConfirm={handleCropConfirm} 
-          onCancel={handleCropCancel} 
-        />
-      )}
-      
-      {!image && <EmptyStatePrompt />}
-      
-      {/* 状态提示 */}
-      <div className='absolute bottom-2 right-2 text-sm text-gray-500 bg-white/70 dark:bg-gray-800/70 px-2 py-1 rounded shadow'>
-        {loading ? "处理中..." : (workerReady ? "Worker 已就绪" : (opencvLoaded ? "正在初始化Canvas..." : "正在加载 OpenCV..."))}
+    <main className="flex-1 flex flex-col min-h-0">
+      {/* 主内容顶部栏 */}
+      <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center space-x-2">
+          <button className="icon-btn" onClick={handleUndo} disabled={!canUndo() || loading} title="撤销">
+            <Undo size={20} />
+          </button>
+          <button className="icon-btn" onClick={handleRedo} disabled={!canRedo() || loading} title="重做">
+            <Redo size={20} />
+          </button>
+          <button className="icon-btn" onClick={handleRevertToOriginal} disabled={!image || loading} title="重置所有操作">
+            <Trash2 size={20} />
+          </button>
+        </div>
+        
+        {isCropMode && <CropControls onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
+        
+        <div className='text-sm text-gray-500'>
+          {loading ? "处理中..." : (workerReady ? "Worker 已就绪" : (opencvLoaded ? "正在初始化Canvas..." : "正在加载 OpenCV..."))}
+        </div>
       </div>
-    </div>
+
+      {/* 画布区域 */}
+      <div 
+        ref={containerRef} // 使用传入的 ref
+        className="flex-1 grid place-items-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative"
+      >
+        {loading && <LoadingOverlay />}
+        
+        <canvas 
+          id="canvas" 
+          ref={canvasRef} 
+          className={`shadow-lg rounded-md ${!isCanvasRendered ? 'invisible' : ''}`}
+          style={{
+            width: `${imageSize.width * zoom}px`,
+            height: `${imageSize.height * zoom}px`,
+          }}
+        ></canvas>
+        
+        <canvas
+          id="crop-canvas"
+          ref={cropCanvasRef}
+          className="absolute"
+          style={{ display: 'none' }}
+          onMouseDown={handleCanvasMouseDown}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseUp={handleCanvasMouseUp}
+          onMouseLeave={handleCanvasMouseUp}
+        ></canvas>
+        
+        {!image && <EmptyStatePrompt />}
+      </div>
+    </main>
   );
 };
 

@@ -2,11 +2,13 @@ import React, { useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import useCollageStore from '../../store/collageStore';
 import useEditorStore from '../../store/editorStore';
+import useImageStore from '../../store/imageStore';
+import useImageProcessing from '../../hooks/useImageProcessing';
+import { getImageDataFromImage } from '../../utils/imageUtils';
 import ToolButton from '../common/ToolButton';
 import LoadingOverlay from '../common/LoadingOverlay';
 import Slider from '../common/Slider';
 
-// 预览画布组件
 const CanvasPreview = ({ imageData }) => {
   const canvasRef = useRef(null);
 
@@ -30,7 +32,7 @@ const CollageMode = () => {
     options, 
     previewData, 
     loading, 
-    initialCollageImage,
+    reset: resetCollage,
     setLayout,
     updateOptions,
     addImages,
@@ -38,56 +40,63 @@ const CollageMode = () => {
     generatePreview,
   } = useCollageStore();
   
-  const { setIsCollageMode, setJustExitedCollageMode, setExitModeType } = useEditorStore();
+  const { setIsCollageMode } = useEditorStore();
+  const { processNewImage } = useImageProcessing();
   const fileInputRef = useRef(null);
   
-  // 初始化，如果有initialCollageImage，需要生成预览
   useEffect(() => {
     if (images.length > 0) {
       generatePreview();
     }
-  }, []);
-  
-  // 文件上传处理
+  }, [images.length]);
+
   const handleFileChange = (e) => {
     addImages(e.target.files);
+    e.target.value = null;
   };
   
-  // 布局和选项变更处理
-  const handleLayoutChange = (newLayout) => {
-    setLayout(newLayout);
-  };
-  
-  const handleOptionsChange = (newOptions) => {
-    updateOptions(newOptions);
-  };
-  
-  // 应用和取消
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!previewData) {
       alert("没有可应用的拼接图像。");
       return;
     }
-    
-    // 标记为退出应用拼图模式
-    setExitModeType('apply');
-    setJustExitedCollageMode(true);
-    
-    // 退出拼图模式，传入拼接结果
-    setIsCollageMode(false);
+
+    try {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = previewData.width;
+      tempCanvas.height = previewData.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.putImageData(previewData, 0, 0);
+
+      const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/png'));
+      const newImage = new Image();
+      const newImageSrc = URL.createObjectURL(blob);
+      
+      newImage.onload = () => {
+        const newImageData = getImageDataFromImage(newImage);
+        processNewImage(newImageData);
+        
+        useImageStore.getState().setImage(newImage);
+        useImageStore.getState().setOriginalFileInfo({ size: blob.size, name: 'collage.png' });
+        
+        URL.revokeObjectURL(newImageSrc);
+        handleExit();
+      };
+      
+      newImage.src = newImageSrc;
+    } catch (error) {
+      console.error("处理拼接图像时出错:", error);
+      alert("处理拼接后的图像时发生错误。");
+    }
   };
   
-  const handleCancel = () => {
-    // 标记为取消退出
-    setExitModeType('cancel');
-    setJustExitedCollageMode(true);
-    
-    // 退出拼图模式，不传递结果
+  const handleExit = () => {
+    resetCollage();
     setIsCollageMode(false);
   };
 
   return (
-    <div className="flex-1 flex bg-gray-200 dark:bg-gray-900 overflow-hidden">
+    <div className="absolute inset-0 bg-gray-200 dark:bg-gray-900 z-30 flex">
       {/* 左侧设置面板 */}
       <aside className="w-80 bg-white dark:bg-gray-800 p-4 overflow-y-auto flex flex-col border-r border-gray-300 dark:border-gray-700">
         <h2 className="text-xl font-semibold mb-4">图片拼接</h2>
@@ -99,19 +108,19 @@ const CollageMode = () => {
               <ToolButton 
                 icon="垂直"
                 title="垂直布局"
-                onClick={() => handleLayoutChange('vertical')}
+                onClick={() => setLayout('vertical')}
                 isActive={layout === 'vertical'}
               />
               <ToolButton 
                 icon="水平"
                 title="水平布局"
-                onClick={() => handleLayoutChange('horizontal')}
+                onClick={() => setLayout('horizontal')}
                 isActive={layout === 'horizontal'}
               />
               <ToolButton 
                 icon="网格"
                 title="网格布局"
-                onClick={() => handleLayoutChange('grid')}
+                onClick={() => setLayout('grid')}
                 isActive={layout === 'grid'}
               />
             </div>
@@ -125,7 +134,7 @@ const CollageMode = () => {
                 type="number" 
                 min="1" 
                 value={options.columns} 
-                onChange={e => handleOptionsChange({ columns: parseInt(e.target.value, 10) || 1 })} 
+                onChange={e => updateOptions({ columns: parseInt(e.target.value, 10) || 1 })} 
                 className="w-full mt-1 p-2 rounded bg-gray-100 dark:bg-gray-700" 
               />
             </div>
@@ -138,7 +147,7 @@ const CollageMode = () => {
             max={100}
             step={1}
             value={options.gap}
-            onChange={(value) => handleOptionsChange({ gap: value })}
+            onChange={(value) => updateOptions({ gap: value })}
           />
 
           <div>
@@ -147,7 +156,7 @@ const CollageMode = () => {
               id="bgColor" 
               type="color" 
               value={options.backgroundColor} 
-              onChange={e => handleOptionsChange({ backgroundColor: e.target.value })} 
+              onChange={e => updateOptions({ backgroundColor: e.target.value })} 
               className="w-full h-10 mt-1 p-1" 
             />
           </div>
@@ -185,7 +194,7 @@ const CollageMode = () => {
 
         <div className="mt-auto pt-4 space-x-2 flex">
           <button 
-            onClick={handleCancel} 
+            onClick={handleExit} 
             className="flex-1 py-2 rounded bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500"
           >
             取消

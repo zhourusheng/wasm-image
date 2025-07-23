@@ -5,11 +5,11 @@ import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
 import useZoom from '../../hooks/useZoom';
 
-const Footer = ({ canvasContainerRef }) => {
+const Footer = ({ containerRef }) => { // 接收 ref
   const { image, imageSize, originalImage, originalFileInfo, getCurrentImageData } = useImageStore();
   const { imageWorker, loading } = useEditorStore();
-  const { zoom, fitZoom } = useUiStore();
-  const { handleManualZoom, resetToFitZoom, resetToOriginalZoom } = useZoom(canvasContainerRef);
+  const { zoom } = useUiStore();
+  const { handleManualZoom, resetToFitZoom, resetToOriginalZoom } = useZoom(containerRef); // 传递 ref
 
   // 原图对比功能
   const handleCompareStart = () => {

@@ -7,7 +7,7 @@ import { logPerformanceToConsole } from '../utils/performanceLogger';
 export const useImageProcessing = () => {
   const { getCurrentImageData, addToHistory, setImageSize, setOriginalImage } = useImageStore();
   const { imageWorker, workerReady, stagedImage } = useEditorStore();
-  const { setLoading, startLoaderTimeout, clearLoaderTimeout, setCanvasRendered } = useUiStore();
+  const { setLoading, startLoaderTimeout, clearLoaderTimeout, setCanvasRendered, setUserHasZoomed } = useUiStore();
   
   // 核心图像处理函数
   const processEdit = useCallback((op, params = {}, isPreview = false) => {
@@ -79,6 +79,7 @@ export const useImageProcessing = () => {
     console.log("处理新图像");
     setLoading(true);
     setCanvasRendered(false);
+    setUserHasZoomed(false); // 修复：重置用户缩放状态
     
     // 保存原始图像用于后续比较
     setOriginalImage(imageData);
@@ -96,7 +97,7 @@ export const useImageProcessing = () => {
         } 
       });
     }
-  }, [imageWorker, setLoading, setCanvasRendered, setOriginalImage]);
+  }, [imageWorker, setLoading, setCanvasRendered, setOriginalImage, setUserHasZoomed]);
   
   // 处理压缩预览结果
   const handleCompressPreviewReady = useCallback((payload) => {

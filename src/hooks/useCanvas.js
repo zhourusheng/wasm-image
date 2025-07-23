@@ -3,10 +3,10 @@ import useImageStore from '../store/imageStore';
 import useEditorStore from '../store/editorStore';
 import useUiStore from '../store/uiStore';
 
-const useCanvas = () => {
+const useCanvas = (containerRef) => { // 接收 ref
   const canvasRef = useRef(null);
   const cropCanvasRef = useRef(null);
-  const canvasContainerRef = useRef(null);
+  const canvasContainerRef = containerRef; // 使用传入的 ref
 
   const { imageSize } = useImageStore();
   const { 
@@ -107,17 +107,6 @@ const useCanvas = () => {
     setIsDragging(false);
   }, [isCropMode, setIsDragging]);
 
-  // 初始化画布与Worker的通信
-  const initCanvasOffscreen = useCallback(() => {
-    if (canvasRef.current && imageWorker && workerReady) {
-      const offscreen = canvasRef.current.transferControlToOffscreen();
-      imageWorker.postMessage({ 
-        type: 'init', 
-        payload: { canvas: offscreen } 
-      }, [offscreen]);
-    }
-  }, [imageWorker, workerReady]);
-
   return {
     canvasRef,
     cropCanvasRef,
@@ -126,7 +115,6 @@ const useCanvas = () => {
     handleCanvasMouseDown,
     handleCanvasMouseMove,
     handleCanvasMouseUp,
-    initCanvasOffscreen,
   };
 };
 
