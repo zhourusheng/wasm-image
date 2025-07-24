@@ -111,13 +111,13 @@ let ctx = null;
 
 (async () => {
     try {
-        const response = await fetch('/js/opencv.wasm');
+        const response = await fetch('https://wasm-worker.oss-cn-nanjing.aliyuncs.com/opencv.wasm');
         if (!response.ok) {
             throw new Error(`加载 wasm 失败： ${response.status} ${response.statusText}`);
         }
         const buffer = await response.arrayBuffer();
         self.Module.wasmBinary = buffer;
-        self.importScripts('/js/opencv.js');
+        self.importScripts('https://wasm-worker.oss-cn-nanjing.aliyuncs.com/opencv.js');
     } catch (error) {
         console.error("在 worker 中加载 OpenCV 失败:", error);
         postMessage({ type: 'error', payload: '初始化 OpenCV 失败。' });
