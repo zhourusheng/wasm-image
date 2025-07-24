@@ -1,4 +1,12 @@
-import { message, Modal, notification } from 'antd';
+import { message, Modal, notification, App } from 'antd';
+
+// 创建一个App实例，用于包装Modal等组件
+let staticApp;
+
+// 初始化方法，在应用启动时调用
+const initializeApp = (appInstance) => {
+  staticApp = appInstance;
+};
 
 const notificationService = {
   // 普通提示信息
@@ -67,15 +75,29 @@ const notificationService = {
 
   // 确认对话框
   confirm: (title, content, onOk, onCancel) => {
-    Modal.confirm({
-      title,
-      content,
-      okText: '确定',
-      cancelText: '取消',
-      onOk,
-      onCancel,
-    });
+    if (staticApp) {
+      // 使用App实例的modal方法
+      staticApp.modal.confirm({
+        title,
+        content,
+        okText: '确定',
+        cancelText: '取消',
+        onOk,
+        onCancel,
+      });
+    } else {
+      // 后备方案：如果App实例不可用，仍使用静态方法
+      Modal.confirm({
+        title,
+        content,
+        okText: '确定',
+        cancelText: '取消',
+        onOk,
+        onCancel,
+      });
+      console.warn('建议使用initializeApp初始化notificationService以支持动态主题');
+    }
   },
 };
 
-export default notificationService; 
+export { notificationService as default, initializeApp }; 
