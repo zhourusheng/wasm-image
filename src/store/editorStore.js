@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { shallow } from 'zustand/shallow';
+import { historyManager } from '../utils/historyManager';
 
 const useEditorStore = create((set, get) => ({
   // Worker和OpenCV状态
@@ -24,7 +26,7 @@ const useEditorStore = create((set, get) => ({
   
   // 初始化Worker
   initWorker: () => {
-    const worker = new Worker(new URL('../workers/imageWorker.js', import.meta.url));
+    const worker = new Worker(new URL('../workers/imageWorker.js?worker&inline', import.meta.url));
     set({ imageWorker: worker });
     
     // 处理Worker消息

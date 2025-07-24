@@ -96,7 +96,7 @@ const pureJsFilters = {
 
 // --- Worker 设置与消息处理 ---
 
-importScripts('/src/wasm/wasmBridge.js'); 
+import { wasmProcessImage } from '../wasm/wasmBridge.js'; 
 
 self.Module = {
     noInitialRun: true,
@@ -175,7 +175,7 @@ self.onmessage = async (e) => {
 
                 } else {
                     // 对于所有其他操作，使用 WebAssembly
-                    resultImageData = await self.wasmProcessImage(
+                    resultImageData = await wasmProcessImage(
                         payload.imageData, 
                         payload.action, 
                         payload.params, 

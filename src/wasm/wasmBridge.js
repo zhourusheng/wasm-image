@@ -4,7 +4,7 @@
 let opencvReady = false;
 
 // 在 classic worker 中, 我们需要将函数附加到 self 全局对象
-self.wasmInit = async function() {
+export async function wasmInit() {
   if (opencvReady) return;
   
   return new Promise((resolve, reject) => {
@@ -31,12 +31,12 @@ self.wasmInit = async function() {
 }
 
 // 修改函数以接收 ctx 和 timer 并直接渲染
-self.wasmProcessImage = async function(imageData, op, params, ctx, timer, skipRendering = false) {
+export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRendering = false) {
   if (!timer) {
     throw new Error("A PerformanceTimer instance must be provided.");
   }
   
-  await self.wasmInit();
+  await wasmInit();
   timer.step('wasm_initialized');
   
   // 创建 OpenCV Mat 对象

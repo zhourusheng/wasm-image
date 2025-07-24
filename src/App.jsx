@@ -16,7 +16,8 @@ function App() {
   const { setImageWorker, activeTool, isCollageMode } = useEditorStore();
   
   useEffect(() => {
-    const worker = new Worker(new URL('./workers/imageWorker.js', import.meta.url));
+    // 告诉 Vite 将 worker 文件作为模块内联处理
+    const worker = new Worker(new URL('./workers/imageWorker.js?worker&inline', import.meta.url));
     setImageWorker(worker);
     
     worker.onmessage = (e) => {
