@@ -9,6 +9,7 @@ import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
 import useImageProcessing from '../../hooks/useImageProcessing';
+import notificationService from '../../utils/notificationService';
 
 // 完全自定义ToolButton组件
 const ToolButton = ({ icon, isActive, onClick, disabled, title }) => {
@@ -36,7 +37,7 @@ const Toolbar = () => {
   // 工具激活处理
   const handleToolActivate = (toolName, defaultParams = {}) => {
     if (!image) {
-      alert('请先上传一张图片');
+      notificationService.warning('请先上传一张图片');
       return;
     }
 
@@ -65,7 +66,7 @@ const Toolbar = () => {
   // 裁剪工具处理
   const handleCropModeToggle = () => {
     if (!image) {
-      alert('请先上传一张图片');
+      notificationService.warning('请先上传一张图片');
       return;
     }
     toggleCropMode();
@@ -74,7 +75,7 @@ const Toolbar = () => {
   // 直接应用效果（无需参数面板）的工具
   const handleDirectEffect = (effect) => {
     if (!image) {
-      alert('请先上传一张图片');
+      notificationService.warning('请先上传一张图片');
       return;
     }
     processEdit(effect);

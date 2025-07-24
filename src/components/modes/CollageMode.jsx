@@ -6,6 +6,7 @@ import useEditorStore from '../../store/editorStore';
 import useImageStore from '../../store/imageStore';
 import useImageProcessing from '../../hooks/useImageProcessing';
 import { getImageDataFromImage } from '../../utils/imageUtils';
+import notificationService from '../../utils/notificationService';
 
 const CanvasPreview = ({ imageData }) => {
   const canvasRef = useRef(null);
@@ -55,7 +56,7 @@ const CollageMode = () => {
   
   const handleApply = async () => {
     if (!previewData) {
-      alert("没有可应用的拼接图像。");
+      notificationService.warning("没有可应用的拼接图像。");
       return;
     }
 
@@ -84,7 +85,7 @@ const CollageMode = () => {
       newImage.src = newImageSrc;
     } catch (error) {
       console.error("处理拼接图像时出错:", error);
-      alert("处理拼接后的图像时发生错误。");
+      notificationService.error("处理拼接后的图像时发生错误。");
     }
   };
   
@@ -188,7 +189,9 @@ const CollageMode = () => {
       <main className="flex-1 grid place-items-center p-4 overflow-auto relative">
         {loading && (
           <div className="absolute inset-0 bg-white/70 dark:bg-black/70 flex justify-center items-center z-10">
-            <Spin size="large" tip="正在生成预览..."/>
+            <Spin spinning={true} size="large" tip="正在生成预览..." wrapperClassName="flex flex-col items-center">
+              <div style={{ width: 300, height: 100 }} className="opacity-0"></div>
+            </Spin>
           </div>
         )}
         

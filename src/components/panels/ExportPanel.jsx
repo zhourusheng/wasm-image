@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { Slider, Button, Modal, Input } from 'antd'; // 引入 Modal 和 Input
+import { Slider, Button, Modal, Input, message } from 'antd'; // 引入 message
 import useImageStore from '../../store/imageStore';
 import useUiStore from '../../store/uiStore';
 import { formatFileSize } from '../../utils/filters';
@@ -50,7 +50,7 @@ const ExportPanel = () => {
 
   const handleConfirmExport = () => {
     if (!exportParams.compressedBlob || !exportParams.previewUrl) {
-      alert("导出文件尚未准备好，请稍等。");
+      message.warning("导出文件尚未准备好，请稍等。");
       return;
     }
     

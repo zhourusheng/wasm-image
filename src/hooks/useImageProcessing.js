@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import useImageStore from '../store/imageStore';
 import useEditorStore from '../store/editorStore';
 import useUiStore from '../store/uiStore';
+import notificationService from '../utils/notificationService';
 import { logPerformanceToConsole } from '../utils/performanceLogger';
 
 export const useImageProcessing = () => {
@@ -12,7 +13,7 @@ export const useImageProcessing = () => {
   // 核心图像处理函数
   const processEdit = useCallback((op, params = {}, isPreview = false) => {
     if (!imageWorker || !workerReady) {
-      alert("Worker 尚未准备好。");
+      notificationService.warning("Worker 尚未准备好。");
       return;
     }
     
@@ -27,7 +28,7 @@ export const useImageProcessing = () => {
     // 预览时基于暂存的图像，否则基于历史记录的当前状态
     const baseImage = isPreview && stagedImage ? stagedImage : getCurrentImageData();
     if (!baseImage) {
-      alert("没有可用的图像数据。");
+      notificationService.warning("没有可用的图像数据。");
       clearLoaderTimeout();
       setLoading(false);
       return;
@@ -143,7 +144,7 @@ export const useImageProcessing = () => {
   const handleWorkerError = useCallback((payload) => {
     console.error("来自 worker 的错误:", payload);
     clearLoaderTimeout();
-    alert("图像处理期间发生错误： " + payload);
+    notificationService.error("图像处理期间发生错误： " + payload);
     setLoading(false);
   }, [clearLoaderTimeout, setLoading]);
 

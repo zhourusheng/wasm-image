@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import HistoryManager from '../utils/historyManager';
+import notificationService from '../utils/notificationService';
 import { loadImageFromFile, getImageDataFromImage } from '../utils/imageUtils';
 
 const useImageStore = create((set, get) => ({
@@ -21,7 +22,7 @@ const useImageStore = create((set, get) => ({
       set({ image: loadedImage });
     } catch (error) {
       console.error(error);
-      alert(error.message);
+      notificationService.error(error.message);
     }
   },
   
@@ -77,6 +78,26 @@ const useImageStore = create((set, get) => ({
   clearHistory: () => {
     get().historyManager.clear();
     set({}); // 触发更新
+  },
+  
+  // 调用异步代码加载图像
+  loadImageFromUrl: async (url) => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+      
+      const blob = await response.blob();
+      const img = new Image();
+      
+      return new Promise((resolve, reject) => {
+        img.onload = () => resolve(img);
+        img.onerror = (error) => reject(error);
+        img.src = URL.createObjectURL(blob);
+      });
+    } catch (error) {
+      notificationService.error(error.message);
+      return null;
+    }
   }
 }));
 

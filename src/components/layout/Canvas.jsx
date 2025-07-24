@@ -7,6 +7,7 @@ import useUiStore from '../../store/uiStore';
 import useCanvas from '../../hooks/useCanvas';
 import useImageProcessing from '../../hooks/useImageProcessing';
 import LoadingOverlay from '../common/LoadingOverlay';
+import notificationService from '../../utils/notificationService';
 
 const EmptyStatePrompt = () => (
   <div className="absolute flex items-center justify-center inset-0">
@@ -99,19 +100,23 @@ const Canvas = ({ containerRef }) => { // 接收 ref
   const handleRevertToOriginal = () => {
     if (!originalImage || loading) return;
 
-    if (confirm('您确定要撤销所有操作，恢复到原始图像吗？')) {
-      setLoading(true);
-      clearActiveTool();
-      clearHistory();
-      setUserHasZoomed(false); // 修复：重置缩放状态
-      imageWorker.postMessage({ type: 'image-process', payload: { imageData: originalImage, action: 'original' } });
-    }
+    notificationService.confirm(
+      '恢复原始图像', 
+      '您确定要撤销所有操作，恢复到原始图像吗？',
+      () => {
+        setLoading(true);
+        clearActiveTool();
+        clearHistory();
+        setUserHasZoomed(false); // 修复：重置缩放状态
+        imageWorker.postMessage({ type: 'image-process', payload: { imageData: originalImage, action: 'original' } });
+      }
+    );
   };
 
   // 裁剪相关
   const handleCropConfirm = () => {
     if (!cropArea || cropArea.width < 10 || cropArea.height < 10) {
-      alert('请选择一个有效的裁剪区域');
+      notificationService.warning('请选择一个有效的裁剪区域');
       return;
     }
     

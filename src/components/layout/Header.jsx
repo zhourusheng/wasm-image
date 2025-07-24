@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { ImagePlay, Folder, Copy, GripVertical, FileOutput } from 'lucide-react';
+import { Folder, Copy, FileOutput, ImagePlay, GripVertical } from 'lucide-react';
 import { Button, Tooltip } from 'antd'; // 引入 Tooltip
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
@@ -7,6 +7,7 @@ import useUiStore from '../../store/uiStore';
 import useCollageStore from '../../store/collageStore';
 import useImageProcessing from '../../hooks/useImageProcessing';
 import { loadImageFromFile, copyImageToClipboard, getImageDataFromImage } from '../../utils/imageUtils';
+import notificationService from '../../utils/notificationService';
 
 const Header = () => {
   const { image, getCurrentImageData, originalFileInfo, setOriginalFileInfo, setImage } = useImageStore();
@@ -42,7 +43,7 @@ const Header = () => {
 
     } catch (error) {
       console.error("文件加载失败:", error);
-      alert("加载图片失败: " + error.message);
+      notificationService.error("加载图片失败: " + error.message);
     }
     
     e.target.value = null;
@@ -51,30 +52,39 @@ const Header = () => {
   const handleCopyClick = async () => {
     const canvas = document.getElementById('canvas');
     if (!canvas) {
-      alert('请先上传一张图片');
+      notificationService.warning('请先上传一张图片');
       return;
     }
     try {
       await copyImageToClipboard(canvas);
-      alert('已复制到剪贴板！');
+      notificationService.success('已复制到剪贴板！');
     } catch (error) {
-      alert(error.message);
+      notificationService.error(error.message);
     }
   };
 
   const handleEnterCollageMode = () => {
     if (image) {
-      if (confirm('您想将当前编辑的图片添加到拼接中吗？')) {
-        const currentImageData = getCurrentImageData();
-        setInitialImage({
-          imageData: currentImageData,
-          name: originalFileInfo.name || `image-${Date.now()}.png`
-        });
-      } else {
-        setInitialImage(null);
-      }
+      notificationService.confirm(
+        '进入拼图模式', 
+        '您想将当前编辑的图片添加到拼接中吗？',
+        () => {
+          const currentImageData = getCurrentImageData();
+          setInitialImage({
+            imageData: currentImageData,
+            name: originalFileInfo.name || `image-${Date.now()}.png`
+          });
+          setIsCollageMode(true);
+        },
+        () => {
+          setInitialImage(null);
+          setIsCollageMode(true);
+        }
+      );
+    } else {
+      setInitialImage(null);
+      setIsCollageMode(true);
     }
-    setIsCollageMode(true);
   };
 
   return (

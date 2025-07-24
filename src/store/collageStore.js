@@ -5,6 +5,9 @@ import {
   createGridCollage,
   loadImagesFromFiles
 } from '../utils/imageCollageUtils';
+import { getImageDataFromImage } from '../utils/imageUtils';
+import { PerformanceTimer, logPerformanceToConsole } from '../utils/performanceLogger';
+import notificationService from '../utils/notificationService';
 
 const useCollageStore = create((set, get) => ({
   // 拼接状态
@@ -35,7 +38,7 @@ const useCollageStore = create((set, get) => ({
         loading: false
       }));
     } catch (error) {
-      alert("加载图片失败: " + error.message);
+      notificationService.error("加载图片失败: " + error.message);
       set({ loading: false });
     }
   },
@@ -84,7 +87,7 @@ const useCollageStore = create((set, get) => ({
       set({ previewData: result, loading: false });
     } catch (error) {
       console.error("创建拼接预览失败:", error);
-      alert("创建拼接预览失败: " + error.message);
+      notificationService.error("创建拼接预览失败: " + error.message);
       set({ loading: false });
     }
   },
