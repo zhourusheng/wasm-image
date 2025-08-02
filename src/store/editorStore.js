@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { shallow } from 'zustand/shallow';
-import { historyManager } from '../utils/historyManager';
 
 const useEditorStore = create((set, get) => ({
   // Worker和OpenCV状态
