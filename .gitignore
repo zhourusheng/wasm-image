@@ -1,4 +1,4 @@
-node_modules
-.history
-opencv/
+node_modules*
+.history*
+opencv*
 dist*

@@ -96,7 +96,22 @@ const pureJsFilters = {
 
 // --- Worker 设置与消息处理 ---
 
-import { wasmProcessImage } from '../wasm/wasmBridge.js'; 
+// 使用动态导入解决开发环境中的模块导入问题
+let wasmProcessImage = null;
+
+// 异步加载wasmBridge模块
+const loadWasmBridge = async () => {
+    if (!wasmProcessImage) {
+        try {
+            const wasmBridge = await import('../wasm/wasmBridge.js');
+            wasmProcessImage = wasmBridge.wasmProcessImage;
+        } catch (error) {
+            console.error('Failed to load wasmBridge:', error);
+            throw error;
+        }
+    }
+    return wasmProcessImage;
+}; 
 
 self.Module = {
     noInitialRun: true,
@@ -175,7 +190,9 @@ self.onmessage = async (e) => {
 
                 } else {
                     // 对于所有其他操作，使用 WebAssembly
-                    resultImageData = await wasmProcessImage(
+                    // 确保wasmBridge已加载
+                    const wasmProcessor = await loadWasmBridge();
+                    resultImageData = await wasmProcessor(
                         payload.imageData, 
                         payload.action, 
                         payload.params, 
