@@ -1,10 +1,24 @@
-// wasmBridge.js
+// wasmBridge.ts
 // 使用 OpenCV.js 的 JavaScript API
+
+import type { ImageDataInterface, FilterParams, PerformanceMetrics } from '../types';
+
+// 声明Worker全局作用域中的OpenCV
+declare const self: DedicatedWorkerGlobalScope & {
+  cv?: any;
+  Module?: any;
+};
+
+// 性能计时器接口（内联版本）
+interface PerformanceTimer {
+  step(stepName: string): void;
+  end(): PerformanceMetrics;
+}
 
 let opencvReady = false;
 
 // 在 classic worker 中, 我们需要将函数附加到 self 全局对象
-export async function wasmInit() {
+export async function wasmInit(): Promise<void> {
   if (opencvReady) return;
   
   return new Promise((resolve, reject) => {
@@ -31,7 +45,14 @@ export async function wasmInit() {
 }
 
 // 修改函数以接收 ctx 和 timer 并直接渲染
-export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRendering = false) {
+export async function wasmProcessImage(
+  imageData: ImageDataInterface, 
+  op: string, 
+  params: FilterParams, 
+  ctx: OffscreenCanvasRenderingContext2D, 
+  timer: PerformanceTimer, 
+  skipRendering: boolean = false
+): Promise<ImageDataInterface> {
   if (!timer) {
     throw new Error("A PerformanceTimer instance must be provided.");
   }
@@ -41,13 +62,19 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
   
   // 创建 OpenCV Mat 对象
   const src = self.cv.matFromImageData(imageData);
-  let dst;
+  let dst: any;
   timer.step('mat_from_imagedata');
   
   try {
     switch (op) {
       case 'crop': {
-        const { x, y, width, height } = params;
+        const { x, y, width, height } = params as {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        };
+        
         // 添加一个健壮性检查，确保裁剪参数有效
         if (x >= 0 && y >= 0 && width > 0 && height > 0 && x + width <= src.cols && y + height <= src.rows) {
           const rect = new self.cv.Rect(x, y, width, height);
@@ -63,8 +90,9 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         }
         break;
       }
+      
       case 'rotate': {
-        const { angle } = params;
+        const { angle } = params as { angle: number };
         const center = new self.cv.Point(src.cols / 2, src.rows / 2);
         const matrix = self.cv.getRotationMatrix2D(center, angle, 1.0);
         
@@ -84,14 +112,16 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         matrix.delete();
         break;
       }
+      
       case 'flip': {
-        const { mode } = params;
+        const { mode } = params as { mode: number };
         dst = new self.cv.Mat();
         self.cv.flip(src, dst, mode); // 0: x轴翻转(水平), 1: y轴翻转(垂直), -1: 同时翻转
         break;
       }
+      
       case 'brightness': {
-        const { delta } = params;
+        const { delta } = params as { delta: number };
         dst = new self.cv.Mat();
         // 优化方案：使用 cv.add 替代通用的 convertTo
         // 创建一个与 src 大小相同，填充了 delta 值的矩阵
@@ -100,32 +130,34 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         deltaMat.delete(); // 清理临时矩阵
         break;
       }
+      
       case 'contrast': {
-        const { factor } = params;
+        const { factor } = params as { factor: number };
         dst = new self.cv.Mat();
         src.convertTo(dst, -1, factor, 0);
         break;
       }
+      
       case 'saturation': {
-        const { factor } = params;
+        const { factor } = params as { factor: number };
         
-        // “终极”优化方案的 JS 模拟：
+        // "终极"优化方案的 JS 模拟：
         // 直接在 Worker 中用一个循环完成所有计算，避免多次调用 Wasm 函数的开销。
         // 这模拟了单一 C++/Wasm 函数的架构，性能会远超之前的实现。
         const data = imageData.data;
         const R_LUMINANCE = 0.299, G_LUMINANCE = 0.587, B_LUMINANCE = 0.114;
 
         for (let i = 0; i < data.length; i += 4) {
-            const r = data[i], g = data[i + 1], b = data[i + 2];
-            
-            // 计算亮度 (grayscale value)
-            const gray = r * R_LUMINANCE + g * G_LUMINANCE + b * B_LUMINANCE;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          
+          // 计算亮度 (grayscale value)
+          const gray = r * R_LUMINANCE + g * G_LUMINANCE + b * B_LUMINANCE;
 
-            // 应用饱和度公式: NewColor = Gray + factor * (Color - Gray)
-            // 并确保结果在 0-255 范围内
-            data[i]   = Math.max(0, Math.min(255, gray + factor * (r - gray)));
-            data[i+1] = Math.max(0, Math.min(255, gray + factor * (g - gray)));
-            data[i+2] = Math.max(0, Math.min(255, gray + factor * (b - gray)));
+          // 应用饱和度公式: NewColor = Gray + factor * (Color - Gray)
+          // 并确保结果在 0-255 范围内
+          data[i] = Math.max(0, Math.min(255, gray + factor * (r - gray)));
+          data[i + 1] = Math.max(0, Math.min(255, gray + factor * (g - gray)));
+          data[i + 2] = Math.max(0, Math.min(255, gray + factor * (b - gray)));
         }
 
         // 尽管我们在 JS 中直接修改了数据，但为了适应现有的渲染流程，
@@ -134,6 +166,7 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         dst = self.cv.matFromImageData(imageData);
         break;
       }
+      
       case 'emboss': {
         // 优化方案：在灰度图上应用卷积，将计算量减少为 1/3
         const gray = new self.cv.Mat();
@@ -152,6 +185,7 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         self.cv.cvtColor(dst, dst, self.cv.COLOR_GRAY2RGBA);
         break;
       }
+      
       case 'sepia': {
         // 优化方案：手动计算通道，避免通用的、较慢的 cv.transform
         dst = new self.cv.Mat();
@@ -221,8 +255,14 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         
         break;
       }
+      
       case 'colorBalance': {
-        const { red = 0, green = 0, blue = 0 } = params;
+        const { red = 0, green = 0, blue = 0 } = params as {
+          red?: number;
+          green?: number;
+          blue?: number;
+        };
+        
         dst = new self.cv.Mat();
         const channels = new self.cv.MatVector();
         self.cv.split(src, channels);
@@ -241,8 +281,9 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         // bChannel, gChannel, rChannel 只是引用，不需要单独 delete
         break;
       }
+      
       case 'blur': {
-        const ksize = (params && params.ksize) || 5; // 提供默认值
+        const ksize = ((params as { ksize?: number })?.ksize) || 5; // 提供默认值
         // 确保 ksize 是一个奇数
         const validKsize = ksize % 2 === 0 ? ksize + 1 : ksize;
         dst = new self.cv.Mat();
@@ -250,6 +291,7 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         self.cv.GaussianBlur(src, dst, kernelSize, 0);
         break;
       }
+      
       case 'grayscale': {
         dst = new self.cv.Mat();
         self.cv.cvtColor(src, dst, self.cv.COLOR_RGBA2GRAY, 0);
@@ -257,6 +299,7 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         self.cv.cvtColor(dst, dst, self.cv.COLOR_GRAY2RGBA, 0);
         break;
       }
+      
       case 'canny': {
         // Canny 输出的是单通道灰度图
         const temp = new self.cv.Mat();
@@ -268,6 +311,7 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         temp.delete();
         break;
       }
+      
       case 'threshold': {
         // Threshold 输出的是单通道灰度图
         const temp = new self.cv.Mat();
@@ -279,6 +323,7 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         temp.delete();
         break;
       }
+      
       case 'sharpen': {
         dst = new self.cv.Mat();
         
@@ -297,9 +342,10 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         kernel.delete();
         break;
       }
+      
       case 'compress': {
         // 在WebAssembly中，我们现在只关心缩放，因为所有压缩逻辑都在主线程的导出面板中处理。
-        const { scale = 1.0 } = params; 
+        const { scale = 1.0 } = params as { scale?: number }; 
         
         // 计算新尺寸
         const newWidth = Math.round(src.cols * scale);
@@ -312,10 +358,12 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
         self.cv.resize(src, dst, dsize, 0, 0, self.cv.INTER_LINEAR);
         break;
       }
+      
       default:
         dst = src.clone();
         break;
     }
+    
     timer.step(`operation_${op}`);
     
     // 使用传入的 OffscreenCanvas Context 直接渲染，不再返回数据
@@ -336,12 +384,12 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
     }
 
     // 将 ImageData 返回，以便 worker 可以将其发送回主线程用于历史记录
-    return resultImageData;
+    return resultImageData as ImageDataInterface;
 
   } catch (error) {
     console.error(`OpenCV operation '${op}' failed:`, error);
     // 抛出更具体的错误信息
-    const errorMessage = error.message || 'An unknown error occurred';
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     throw new Error(`处理 '${op}' 操作时出错: ${errorMessage}`);
   } finally {
     // 清理内存
@@ -351,4 +399,4 @@ export async function wasmProcessImage(imageData, op, params, ctx, timer, skipRe
     }
     timer.step('memory_cleanup');
   }
-} 
+}

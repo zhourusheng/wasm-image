@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { RefObject } from 'react';
 import { ZoomInOutlined, ZoomOutOutlined, EyeOutlined, CompressOutlined, OneToOneOutlined } from '@ant-design/icons';
 import { Button, Tooltip } from 'antd';
 import useImageStore from '../../store/imageStore';
@@ -6,34 +6,56 @@ import useEditorStore from '../../store/editorStore';
 import useUiStore from '../../store/uiStore';
 import useZoom from '../../hooks/useZoom';
 
-const Footer = ({ containerRef }) => {
-  const { image, imageSize, originalImage, originalFileInfo, getCurrentImageData } = useImageStore();
-  const { imageWorker, loading } = useEditorStore();
-  const { zoom } = useUiStore();
+interface FooterProps {
+  containerRef: RefObject<HTMLDivElement>;
+}
+
+const Footer: React.FC<FooterProps> = ({ containerRef }) => {
+  const { currentImage, originalFileInfo, getCurrentImageData } = useImageStore();
+  const { imageWorker, zoom } = useEditorStore();
+  const { loading } = useUiStore();
   const { handleManualZoom, resetToFitZoom, resetToOriginalZoom } = useZoom(containerRef);
 
-  const handleCompareStart = () => {
-    if (!originalImage || loading) return;
-    imageWorker.postMessage({ type: 'image-process', payload: { imageData: originalImage, action: 'original', isHistoryNavigation: true } });
+  const handleCompareStart = (): void => {
+    // 暂时注释掉原图比较功能，因为originalImage字段可能不存在
+    // TODO: 实现原图比较功能
+    console.log('Compare start - feature not implemented');
   };
 
-  const handleCompareEnd = () => {
-    const currentState = getCurrentImageData();
-    if (!currentState || loading) return;
-    imageWorker.postMessage({ type: 'image-process', payload: { imageData: currentState, action: 'original', isHistoryNavigation: true } });
+  const handleCompareEnd = (): void => {
+    // 暂时注释掉原图比较功能
+    // TODO: 实现原图比较功能
+    console.log('Compare end - feature not implemented');
+  };
+
+  const handleZoomOut = (): void => {
+    handleManualZoom(zoom - 0.1);
+  };
+
+  const handleZoomIn = (): void => {
+    handleManualZoom(zoom + 0.1);
+  };
+
+  const handleZoomReset = (): void => {
+    resetToOriginalZoom();
   };
 
   return (
     <footer className="h-10 flex-shrink-0 flex items-center justify-center px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm z-10 relative">
-      {image && (
+      {currentImage && (
         <div className="absolute left-4 text-gray-500 dark:text-gray-400 truncate max-w-xs" title={originalFileInfo.name}>
           <span>{originalFileInfo.name}</span>
         </div>
       )}
       <div className="text-center">
-        <span>{imageSize.width > 0 ? `${imageSize.width}x${imageSize.height}` : '无图像'}</span>
+        <span>
+          {currentImage && currentImage.width > 0 
+            ? `${currentImage.width}x${currentImage.height}` 
+            : '无图像'
+          }
+        </span>
       </div>
-      {image && (
+      {currentImage && (
         <div className="absolute right-4 flex items-center space-x-2">
           <Tooltip title="适应屏幕">
             <Button type="text" icon={<CompressOutlined />} onClick={resetToFitZoom} />
@@ -51,24 +73,35 @@ const Footer = ({ containerRef }) => {
               onMouseDown={handleCompareStart}
               onMouseUp={handleCompareEnd}
               onMouseLeave={handleCompareEnd}
+              disabled={loading}
             />
           </Tooltip>
           
           <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
 
-          <Button type="text" icon={<ZoomOutOutlined />} onClick={() => handleManualZoom(zoom - 0.1)} />
+          <Button 
+            type="text" 
+            icon={<ZoomOutOutlined />} 
+            onClick={handleZoomOut}
+            disabled={loading}
+          />
           <span 
-            className="w-16 text-center" 
-            onDoubleClick={resetToOriginalZoom} 
+            className="w-16 text-center cursor-pointer" 
+            onDoubleClick={handleZoomReset} 
             title="双击重置为100%"
           >
             {`${Math.round(zoom * 100)}%`}
           </span>
-          <Button type="text" icon={<ZoomInOutlined />} onClick={() => handleManualZoom(zoom + 0.1)} />
+          <Button 
+            type="text" 
+            icon={<ZoomInOutlined />} 
+            onClick={handleZoomIn}
+            disabled={loading}
+          />
         </div>
       )}
     </footer>
   );
 };
 
-export default Footer; 
+export default Footer;

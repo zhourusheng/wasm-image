@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css'
+import React, { useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
 import { ConfigProvider, App as AntdApp } from 'antd';
 import notificationService, { initializeApp } from './utils/notificationService';
 
@@ -10,11 +10,11 @@ ConfigProvider.config({
   theme: {
     hashed: false,
   },
-  warning: false
+  warning: false,
 });
 
 // 创建一个包装组件，用于初始化notificationService
-const AppContent = () => {
+const AppContent: React.FC = () => {
   // 使用useApp钩子获取App实例
   const antApp = AntdApp.useApp();
 
@@ -29,7 +29,7 @@ const AppContent = () => {
 };
 
 // 外层应用包装器
-const AppWrapper = () => {
+const AppWrapper: React.FC = () => {
   return (
     <ConfigProvider>
       <AntdApp>
@@ -39,8 +39,13 @@ const AppWrapper = () => {
   );
 };
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppWrapper />
-  </React.StrictMode>,
-) 
+  </React.StrictMode>
+);
