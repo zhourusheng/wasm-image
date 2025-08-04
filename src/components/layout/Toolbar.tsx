@@ -1,8 +1,20 @@
 import React from 'react';
 import {
-  Sun, Contrast, Droplets, Palette, SlidersHorizontal,
-  Crop, RotateCw, RotateCcw, FlipHorizontal, FlipVertical, Wand2,
-  Aperture, SquarePen, Eclipse, History
+  Sun,
+  Contrast,
+  Droplets,
+  Palette,
+  SlidersHorizontal,
+  Crop,
+  RotateCw,
+  RotateCcw,
+  FlipHorizontal,
+  FlipVertical,
+  Wand2,
+  Aperture,
+  SquarePen,
+  Eclipse,
+  History,
 } from 'lucide-react';
 import { Tooltip } from 'antd';
 import useImageStore from '../../store/imageStore';
@@ -22,24 +34,24 @@ interface ToolButtonProps {
 }
 
 // 完全自定义ToolButton组件
-const ToolButton: React.FC<ToolButtonProps> = ({ 
-  icon, 
-  isActive = false, 
-  onClick, 
-  disabled = false, 
-  title 
+const ToolButton: React.FC<ToolButtonProps> = ({
+  icon,
+  isActive = false,
+  onClick,
+  disabled = false,
+  title,
 }) => {
   return (
     <Tooltip title={title} placement="right">
-      <div 
+      <div
         className={`w-12 h-12 flex items-center justify-center cursor-pointer transition-colors ${
-          isActive ? 'bg-blue-500 text-white' : 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+          isActive
+            ? 'bg-blue-500 text-white'
+            : 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         onClick={!disabled ? onClick : undefined}
       >
-        <div className="flex items-center justify-center">
-          {icon}
-        </div>
+        <div className="flex items-center justify-center">{icon}</div>
       </div>
     </Tooltip>
   );
@@ -52,7 +64,10 @@ const Toolbar: React.FC = () => {
   const { processEdit } = useImageProcessing();
 
   // 工具激活处理
-  const handleToolActivate = (toolName: ToolType, defaultParams: FilterParams = {}): void => {
+  const handleToolActivate = (
+    toolName: ToolType,
+    defaultParams: FilterParams = {}
+  ): void => {
     if (!currentImage) {
       notificationService.warning('请先上传一张图片');
       return;
@@ -126,74 +141,80 @@ const Toolbar: React.FC = () => {
     <aside className="w-20 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-2 flex flex-col items-center space-y-2 text-xs overflow-y-auto">
       {/* 调整工具组 */}
       <div className="flex flex-col items-center space-y-1 w-full">
-        <span className="font-medium text-gray-500 dark:text-gray-400">调整</span>
-        <ToolButton 
+        <span className="font-medium text-gray-500 dark:text-gray-400">
+          调整
+        </span>
+        <ToolButton
           icon={<Sun size={20} />}
           title="亮度"
           isActive={activeTool === 'brightness'}
           onClick={() => handleToolActivate('brightness', { delta: 0 })}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<Contrast size={20} />}
           title="对比度"
           isActive={activeTool === 'contrast'}
           onClick={() => handleToolActivate('contrast', { factor: 1 })}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<Droplets size={20} />}
           title="饱和度"
           isActive={activeTool === 'saturation'}
           onClick={() => handleToolActivate('saturation', { factor: 1 })}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<Palette size={20} />}
           title="色彩平衡"
           isActive={activeTool === 'colorBalance'}
-          onClick={() => handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })}
+          onClick={() =>
+            handleToolActivate('colorBalance', { red: 0, green: 0, blue: 0 })
+          }
           disabled={!currentImage || loading}
         />
       </div>
-      
+
       <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
 
       {/* 效果工具组 */}
       <div className="flex flex-col items-center space-y-1 w-full">
-        <span className="font-medium text-gray-500 dark:text-gray-400">效果</span>
-        <ToolButton 
+        <span className="font-medium text-gray-500 dark:text-gray-400">
+          效果
+        </span>
+        <ToolButton
           icon={<SlidersHorizontal size={20} />}
           title="灰度"
           onClick={() => handleDirectEffect('grayscale')}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<Aperture size={20} />}
           title="模糊"
           isActive={activeTool === 'blur'}
           onClick={() => handleToolActivate('blur', { ksize: 5 })}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<SquarePen size={20} />}
           title="边缘检测"
           onClick={() => handleDirectEffect('canny')}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<Eclipse size={20} />}
           title="阈值"
           onClick={() => handleDirectEffect('threshold')}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<Wand2 size={20} />}
           title="浮雕"
           onClick={() => handleDirectEffect('emboss')}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<History size={20} />}
           title="复古"
           onClick={() => handleDirectEffect('sepia')}
@@ -205,32 +226,34 @@ const Toolbar: React.FC = () => {
 
       {/* 变换工具组 */}
       <div className="flex flex-col items-center space-y-1 w-full">
-        <span className="font-medium text-gray-500 dark:text-gray-400">变换</span>
-        <ToolButton 
+        <span className="font-medium text-gray-500 dark:text-gray-400">
+          变换
+        </span>
+        <ToolButton
           icon={<Crop size={20} />}
           title="裁剪"
           onClick={handleCropModeToggle}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<RotateCw size={20} />}
           title="顺时针旋转"
           onClick={handleRotateCw}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<RotateCcw size={20} />}
           title="逆时针旋转"
           onClick={handleRotateCcw}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<FlipHorizontal size={20} />}
           title="水平翻转"
           onClick={handleFlipH}
           disabled={!currentImage || loading}
         />
-        <ToolButton 
+        <ToolButton
           icon={<FlipVertical size={20} />}
           title="垂直翻转"
           onClick={handleFlipV}

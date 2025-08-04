@@ -58,7 +58,7 @@ class PerformanceTimer {
   ): T {
     const timer = new PerformanceTimer(operationName, metadata);
     timer.step('operation_start');
-    
+
     try {
       const result = operation();
       timer.step('operation_end');
@@ -81,7 +81,7 @@ class PerformanceTimer {
   ): Promise<T> {
     const timer = new PerformanceTimer(operationName, metadata);
     timer.step('operation_start');
-    
+
     try {
       const result = await operation();
       timer.step('operation_end');
@@ -102,20 +102,22 @@ class PerformanceTimer {
  */
 export function logPerformanceToConsole(perfLog: PerformanceMetrics): void {
   if (!perfLog) return;
-  
-  console.group(`🕒 Performance: ${perfLog.operation} - ${perfLog.totalTime}ms`);
-  
+
+  console.group(
+    `🕒 Performance: ${perfLog.operation} - ${perfLog.totalTime}ms`
+  );
+
   if (perfLog.metadata && Object.keys(perfLog.metadata).length > 0) {
     console.log('📋 Metadata:', perfLog.metadata);
   }
-  
+
   console.table(
     perfLog.steps.map(step => ({
       Step: step.name,
       'Time (ms)': step.elapsed,
     }))
   );
-  
+
   console.log(`🕒 Total time: ${perfLog.totalTime}ms`);
   console.groupEnd();
 }
@@ -153,7 +155,9 @@ export function asyncPerformanceMonitor(operationName?: string) {
     const name = operationName || `${target.constructor.name}.${propertyName}`;
 
     descriptor.value = function (...args: Parameters<T>) {
-      return PerformanceTimer.measureAsync(name, () => method.apply(this, args));
+      return PerformanceTimer.measureAsync(name, () =>
+        method.apply(this, args)
+      );
     } as T;
 
     return descriptor;

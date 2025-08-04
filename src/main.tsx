@@ -3,7 +3,9 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { ConfigProvider, App as AntdApp } from 'antd';
-import notificationService, { initializeApp } from './utils/notificationService';
+import notificationService, {
+  initializeApp,
+} from './utils/notificationService';
 
 // 禁用Ant Design的React版本兼容性检查
 ConfigProvider.config({

@@ -34,12 +34,12 @@ export type CollageLayout = 'horizontal' | 'vertical' | 'grid';
  * 计算水平拼接时的总宽度和高度
  */
 export const calculateHorizontalDimensions = (
-  images: ImageDataInterface[], 
+  images: ImageDataInterface[],
   gap: number
 ): Dimensions => {
   let totalWidth = 0;
   let maxHeight = 0;
-  
+
   images.forEach((img, index) => {
     totalWidth += img.width;
     if (index < images.length - 1) {
@@ -47,7 +47,7 @@ export const calculateHorizontalDimensions = (
     }
     maxHeight = Math.max(maxHeight, img.height);
   });
-  
+
   return { width: totalWidth, height: maxHeight };
 };
 
@@ -55,12 +55,12 @@ export const calculateHorizontalDimensions = (
  * 计算垂直拼接时的总宽度和高度
  */
 export const calculateVerticalDimensions = (
-  images: ImageDataInterface[], 
+  images: ImageDataInterface[],
   gap: number
 ): Dimensions => {
   let maxWidth = 0;
   let totalHeight = 0;
-  
+
   images.forEach((img, index) => {
     maxWidth = Math.max(maxWidth, img.width);
     totalHeight += img.height;
@@ -68,7 +68,7 @@ export const calculateVerticalDimensions = (
       totalHeight += gap;
     }
   });
-  
+
   return { width: maxWidth, height: totalHeight };
 };
 
@@ -76,38 +76,42 @@ export const calculateVerticalDimensions = (
  * 计算网格拼接时的总宽度和高度
  */
 export const calculateGridDimensions = (
-  images: ImageDataInterface[], 
-  columns: number, 
+  images: ImageDataInterface[],
+  columns: number,
   gap: number
 ): GridDimensions => {
   const rows = Math.ceil(images.length / columns);
-  
+
   // 计算每行的最大宽度和每列的最大高度
   const colWidths = new Array(columns).fill(0);
   const rowHeights = new Array(rows).fill(0);
-  
+
   images.forEach((img, index) => {
     const row = Math.floor(index / columns);
     const col = index % columns;
-    
+
     colWidths[col] = Math.max(colWidths[col], img.width);
     rowHeights[row] = Math.max(rowHeights[row], img.height);
   });
-  
+
   // 计算总宽度和高度（包括间距）
-  const totalWidth = colWidths.reduce((sum, w) => sum + w, 0) + (columns - 1) * gap;
-  const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0) + (rows - 1) * gap;
-  
+  const totalWidth =
+    colWidths.reduce((sum, w) => sum + w, 0) + (columns - 1) * gap;
+  const totalHeight =
+    rowHeights.reduce((sum, h) => sum + h, 0) + (rows - 1) * gap;
+
   return { width: totalWidth, height: totalHeight, colWidths, rowHeights };
 };
 
 /**
  * 从多个文件加载图片为ImageData数组
  */
-export async function loadImagesFromFiles(files: File[] | FileList): Promise<ImageItem[]> {
+export async function loadImagesFromFiles(
+  files: File[] | FileList
+): Promise<ImageItem[]> {
   const fileArray = Array.isArray(files) ? files : Array.from(files);
-  
-  const imagePromises = fileArray.map(async (file) => {
+
+  const imagePromises = fileArray.map(async file => {
     try {
       const image = await loadImageFromFile(file);
       const imageData = getImageDataFromImage(image);
@@ -125,7 +129,7 @@ export async function loadImagesFromFiles(files: File[] | FileList): Promise<Ima
  * 创建水平拼接的图片
  */
 export function createHorizontalCollage(
-  imagesDataArray: ImageDataInterface[], 
+  imagesDataArray: ImageDataInterface[],
   options: CollageOptions = {}
 ): ImageDataInterface {
   const { gap = 10, backgroundColor = '#ffffff' } = options;
@@ -134,8 +138,9 @@ export function createHorizontalCollage(
     throw new Error('没有图片可以拼接');
   }
 
-  const totalWidth = imagesDataArray.reduce((sum, img) => sum + img.width, 0) + 
-                     gap * (imagesDataArray.length - 1);
+  const totalWidth =
+    imagesDataArray.reduce((sum, img) => sum + img.width, 0) +
+    gap * (imagesDataArray.length - 1);
   const maxHeight = Math.max(...imagesDataArray.map(img => img.height));
 
   const canvas = document.createElement('canvas');
@@ -166,17 +171,18 @@ export function createHorizontalCollage(
  * 创建垂直拼接的图片
  */
 export function createVerticalCollage(
-  imagesDataArray: ImageDataInterface[], 
+  imagesDataArray: ImageDataInterface[],
   options: CollageOptions = {}
 ): ImageDataInterface {
   const { gap = 10, backgroundColor = '#ffffff' } = options;
-  
+
   if (imagesDataArray.length === 0) {
     throw new Error('没有图片可以拼接');
   }
 
-  const totalHeight = imagesDataArray.reduce((sum, img) => sum + img.height, 0) + 
-                      gap * (imagesDataArray.length - 1);
+  const totalHeight =
+    imagesDataArray.reduce((sum, img) => sum + img.height, 0) +
+    gap * (imagesDataArray.length - 1);
   const maxWidth = Math.max(...imagesDataArray.map(img => img.width));
 
   const canvas = document.createElement('canvas');
@@ -207,11 +213,11 @@ export function createVerticalCollage(
  * 创建网格拼接的图片
  */
 export function createGridCollage(
-  imagesDataArray: ImageDataInterface[], 
+  imagesDataArray: ImageDataInterface[],
   options: CollageOptions = {}
 ): ImageDataInterface {
   const { gap = 10, backgroundColor = '#ffffff', columns = 2 } = options;
-  
+
   if (imagesDataArray.length === 0) {
     throw new Error('没有图片可以拼接');
   }
@@ -234,8 +240,10 @@ export function createGridCollage(
     }
   });
 
-  const totalWidth = colWidths.reduce((sum, w) => sum + w, 0) + gap * (numColumns - 1);
-  const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0) + gap * (numRows - 1);
+  const totalWidth =
+    colWidths.reduce((sum, w) => sum + w, 0) + gap * (numColumns - 1);
+  const totalHeight =
+    rowHeights.reduce((sum, h) => sum + h, 0) + gap * (numRows - 1);
 
   const canvas = document.createElement('canvas');
   canvas.width = totalWidth;
@@ -249,7 +257,7 @@ export function createGridCollage(
   // 填充背景色
   ctx.fillStyle = backgroundColor;
   ctx.fillRect(0, 0, totalWidth, totalHeight);
-  
+
   // 计算每列的X偏移量
   const colXOffsets = [0];
   for (let i = 1; i < numColumns; i++) {
@@ -265,11 +273,13 @@ export function createGridCollage(
   imagesDataArray.forEach((imageData, index) => {
     const col = index % numColumns;
     const row = Math.floor(index / numColumns);
-    
+
     // 计算居中位置
-    const xOffset = colXOffsets[col] + Math.floor((colWidths[col] - imageData.width) / 2);
-    const yOffset = rowYOffsets[row] + Math.floor((rowHeights[row] - imageData.height) / 2);
-    
+    const xOffset =
+      colXOffsets[col] + Math.floor((colWidths[col] - imageData.width) / 2);
+    const yOffset =
+      rowYOffsets[row] + Math.floor((rowHeights[row] - imageData.height) / 2);
+
     ctx.putImageData(imageData, xOffset, yOffset);
   });
 
@@ -308,36 +318,41 @@ export function createCustomCollage(
   // 绘制每个图片项
   items.forEach(item => {
     const { imageData, x, y, width, height, rotation = 0 } = item;
-    
+
     ctx.save();
-    
+
     // 创建临时canvas来处理图片
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = imageData.width;
     tempCanvas.height = imageData.height;
     const tempCtx = tempCanvas.getContext('2d');
-    
+
     if (!tempCtx) return;
-    
+
     tempCtx.putImageData(imageData, 0, 0);
-    
+
     // 应用变换
     ctx.translate(x, y);
     if (rotation !== 0) {
       ctx.rotate((rotation * Math.PI) / 180);
     }
-    
+
     // 绘制图片（如果指定了宽高则缩放）
     if (width && height) {
       ctx.drawImage(tempCanvas, -width / 2, -height / 2, width, height);
     } else {
       ctx.drawImage(tempCanvas, -imageData.width / 2, -imageData.height / 2);
     }
-    
+
     ctx.restore();
   });
 
-  return ctx.getImageData(0, 0, canvasWidth, canvasHeight) as ImageDataInterface;
+  return ctx.getImageData(
+    0,
+    0,
+    canvasWidth,
+    canvasHeight
+  ) as ImageDataInterface;
 }
 
 /**
@@ -399,7 +414,10 @@ export function validateCollageParams(
     errors.push('间距必须在0-1000像素之间');
   }
 
-  if (options.columns !== undefined && (options.columns < 1 || options.columns > 10)) {
+  if (
+    options.columns !== undefined &&
+    (options.columns < 1 || options.columns > 10)
+  ) {
     errors.push('列数必须在1-10之间');
   }
 
@@ -412,6 +430,6 @@ export function validateCollageParams(
 
   return {
     valid: errors.length === 0,
-    errors
+    errors,
   };
 }

@@ -31,7 +31,7 @@ export interface WorkerMessage {
 }
 
 // 图像处理操作类型
-export type ImageOperation = 
+export type ImageOperation =
   | 'grayscale'
   | 'sepia'
   | 'brightness'
@@ -79,7 +79,7 @@ export interface HistoryItem {
 }
 
 // 工具类型
-export type ToolType = 
+export type ToolType =
   | 'crop'
   | 'rotate'
   | 'flip'
@@ -147,7 +147,11 @@ export interface ImageStoreState {
   canRedo: boolean;
   // 方法
   setImage: (imageData: ImageDataInterface) => void;
-  updateImage: (imageData: ImageDataInterface, operation?: string, params?: FilterParams) => void;
+  updateImage: (
+    imageData: ImageDataInterface,
+    operation?: string,
+    params?: FilterParams
+  ) => void;
   undo: () => ImageDataInterface | null;
   redo: () => ImageDataInterface | null;
   clearHistory: () => void;
@@ -186,13 +190,20 @@ export interface UIStoreState {
   showExportPanel: boolean;
   showParamsPanel: boolean;
   darkMode: boolean;
-  notifications: Array<{ id: string; type: 'success' | 'error' | 'warning' | 'info'; message: string }>;
+  notifications: Array<{
+    id: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+    message: string;
+  }>;
   exportPreview: ExportPreview | null;
   deviceInfo: DeviceInfo;
   featureSupport: FeatureSupport;
   // 方法
   setLoading: (loading: boolean, text?: string) => void;
-  showNotification: (type: 'success' | 'error' | 'warning' | 'info', message: string) => void;
+  showNotification: (
+    type: 'success' | 'error' | 'warning' | 'info',
+    message: string
+  ) => void;
   hideNotification: (id: string) => void;
   toggleExportPanel: () => void;
   toggleParamsPanel: () => void;
@@ -200,7 +211,10 @@ export interface UIStoreState {
   setExportPreview: (preview: ExportPreview | null) => void;
   updateDeviceInfo: (info: Partial<DeviceInfo>) => void;
   updateFeatureSupport: (support: Partial<FeatureSupport>) => void;
-  generateExportPreview: (imageData: ImageDataInterface, params: ExportParams) => Promise<void>;
+  generateExportPreview: (
+    imageData: ImageDataInterface,
+    params: ExportParams
+  ) => Promise<void>;
 }
 
 export interface CollageStoreState {
@@ -259,8 +273,11 @@ export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };
 
-export type RequireAtLeastOne<T, Keys extends keyof T = keyof T> = 
-  Pick<T, Exclude<keyof T, Keys>> & {
+export type RequireAtLeastOne<T, Keys extends keyof T = keyof T> = Pick<
+  T,
+  Exclude<keyof T, Keys>
+> &
+  {
     [K in Keys]-?: Required<Pick<T, K>> & Partial<Pick<T, Exclude<Keys, K>>>;
   }[Keys];
 
@@ -268,7 +285,8 @@ export type RequireAtLeastOne<T, Keys extends keyof T = keyof T> =
 export type AsyncFunction<T = void, U = unknown> = (...args: U[]) => Promise<T>;
 export type EventCallback<T = unknown> = (event: T) => void;
 export type Nullable<T> = T | null;
-export type Optional<T, K extends keyof T = keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+export type Optional<T, K extends keyof T = keyof T> = Omit<T, K> &
+  Partial<Pick<T, K>>;
 
 // Canvas 上下文类型扩展
 export interface CanvasRenderingContext2D {
@@ -285,7 +303,7 @@ declare global {
     mozRequestAnimationFrame?: typeof requestAnimationFrame;
     msRequestAnimationFrame?: typeof requestAnimationFrame;
   }
-  
+
   interface WorkerGlobalScope {
     cv?: any; // OpenCV.js 在 Worker 中的全局对象
     Module?: any; // WebAssembly Module

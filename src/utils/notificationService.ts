@@ -92,8 +92,8 @@ const notificationService = {
 
   // 右上角通知
   notify: (
-    type: NotificationType, 
-    messageText: string, 
+    type: NotificationType,
+    messageText: string,
     description?: string
   ): void => {
     notification[type]({
@@ -130,7 +130,9 @@ const notificationService = {
         onOk,
         onCancel,
       });
-      console.warn('建议使用initializeApp初始化notificationService以支持动态主题');
+      console.warn(
+        '建议使用initializeApp初始化notificationService以支持动态主题'
+      );
     }
   },
 
@@ -204,4 +206,10 @@ const notificationService = {
 };
 
 export { notificationService as default, initializeApp };
-export type { AppInstance, NotificationType, MessageConfig, NotificationConfig, ConfirmConfig };
+export type {
+  AppInstance,
+  NotificationType,
+  MessageConfig,
+  NotificationConfig,
+  ConfirmConfig,
+};

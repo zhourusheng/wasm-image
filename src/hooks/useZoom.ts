@@ -9,7 +9,9 @@ interface UseZoomReturn {
   resetToOriginalZoom: () => void;
 }
 
-const useZoom = (canvasContainerRef: RefObject<HTMLDivElement>): UseZoomReturn => {
+const useZoom = (
+  canvasContainerRef: RefObject<HTMLDivElement>
+): UseZoomReturn => {
   const { currentImage } = useImageStore();
   const { zoom, setZoom, setUserHasZoomed } = useUiStore();
   const { setZoom: setEditorZoom } = useEditorStore();
@@ -23,14 +25,14 @@ const useZoom = (canvasContainerRef: RefObject<HTMLDivElement>): UseZoomReturn =
 
   const resetToFitZoom = () => {
     if (!canvasContainerRef.current || !currentImage) return;
-    
+
     const container = canvasContainerRef.current;
     const containerRect = container.getBoundingClientRect();
-    
+
     const scaleX = containerRect.width / currentImage.width;
     const scaleY = containerRect.height / currentImage.height;
     const fitZoom = Math.min(scaleX, scaleY, 1); // 不要超过100%
-    
+
     setZoom(fitZoom);
     setEditorZoom(fitZoom);
     setUserHasZoomed(false);
@@ -51,12 +53,13 @@ const useZoom = (canvasContainerRef: RefObject<HTMLDivElement>): UseZoomReturn =
       const entry = entries[0];
       if (entry && currentImage.width > 0) {
         // 使用 contentRect 可以精确获取内容区域的尺寸
-        const { width: containerWidth, height: containerHeight } = entry.contentRect;
-        
+        const { width: containerWidth, height: containerHeight } =
+          entry.contentRect;
+
         const scaleX = containerWidth / currentImage.width;
         const scaleY = containerHeight / currentImage.height;
         const newFitZoom = Math.min(scaleX, scaleY, 1); // 不要超过100%
-        
+
         // 仅当用户未手动缩放时，才自动应用适应屏幕的缩放
         if (!useUiStore.getState().userHasZoomed) {
           setZoom(newFitZoom);
@@ -72,7 +75,7 @@ const useZoom = (canvasContainerRef: RefObject<HTMLDivElement>): UseZoomReturn =
   return {
     handleManualZoom,
     resetToFitZoom,
-    resetToOriginalZoom
+    resetToOriginalZoom,
   };
 };
 

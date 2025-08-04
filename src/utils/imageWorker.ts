@@ -1,9 +1,9 @@
 // imageWorker.ts
-import type { 
-  ImageDataInterface, 
-  FilterParams, 
+import type {
+  ImageDataInterface,
+  FilterParams,
   WorkerMessage,
-  PerformanceMetrics 
+  PerformanceMetrics,
 } from '../types';
 
 // Worker消息接口
@@ -74,7 +74,9 @@ class PerformanceTimer {
 function applySepiaJS(imageData: ImageDataInterface): ImageDataInterface {
   const data = imageData.data;
   for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const r = data[i],
+      g = data[i + 1],
+      b = data[i + 2];
     const newR = r * 0.393 + g * 0.769 + b * 0.189;
     const newG = r * 0.349 + g * 0.686 + b * 0.168;
     const newB = r * 0.272 + g * 0.534 + b * 0.131;
@@ -87,16 +89,23 @@ function applySepiaJS(imageData: ImageDataInterface): ImageDataInterface {
 
 function applyGrayscaleJS(imageData: ImageDataInterface): ImageDataInterface {
   const data = imageData.data;
-  const LUMINANCE_R = 0.299, LUMINANCE_G = 0.587, LUMINANCE_B = 0.114;
+  const LUMINANCE_R = 0.299,
+    LUMINANCE_G = 0.587,
+    LUMINANCE_B = 0.114;
   for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const r = data[i],
+      g = data[i + 1],
+      b = data[i + 2];
     const gray = r * LUMINANCE_R + g * LUMINANCE_G + b * LUMINANCE_B;
     data[i] = data[i + 1] = data[i + 2] = gray;
   }
   return imageData;
 }
 
-function applyBrightnessJS(imageData: ImageDataInterface, params: FilterParams): ImageDataInterface {
+function applyBrightnessJS(
+  imageData: ImageDataInterface,
+  params: FilterParams
+): ImageDataInterface {
   const data = imageData.data;
   const delta = (params.delta as number) || 0;
   for (let i = 0; i < data.length; i += 4) {
@@ -107,7 +116,10 @@ function applyBrightnessJS(imageData: ImageDataInterface, params: FilterParams):
   return imageData;
 }
 
-function applyContrastJS(imageData: ImageDataInterface, params: FilterParams): ImageDataInterface {
+function applyContrastJS(
+  imageData: ImageDataInterface,
+  params: FilterParams
+): ImageDataInterface {
   const data = imageData.data;
   const factor = (params.factor as number) || 1;
   const intercept = 128 - factor * 128;
@@ -120,7 +132,10 @@ function applyContrastJS(imageData: ImageDataInterface, params: FilterParams): I
 }
 
 // 纯JS滤镜映射
-const pureJsFilters: Record<string, (imageData: ImageDataInterface, params?: FilterParams) => ImageDataInterface> = {
+const pureJsFilters: Record<
+  string,
+  (imageData: ImageDataInterface, params?: FilterParams) => ImageDataInterface
+> = {
   sepia: applySepiaJS,
   grayscale: applyGrayscaleJS,
   brightness: applyBrightnessJS,
@@ -130,14 +145,16 @@ const pureJsFilters: Record<string, (imageData: ImageDataInterface, params?: Fil
 // --- Worker 设置与消息处理 ---
 
 // 使用动态导入解决开发环境中的模块导入问题
-let wasmProcessImage: ((
-  imageData: ImageDataInterface,
-  op: string,
-  params: FilterParams,
-  ctx: OffscreenCanvasRenderingContext2D,
-  timer: PerformanceTimer,
-  skipRendering?: boolean
-) => Promise<ImageDataInterface>) | null = null;
+let wasmProcessImage:
+  | ((
+      imageData: ImageDataInterface,
+      op: string,
+      params: FilterParams,
+      ctx: OffscreenCanvasRenderingContext2D,
+      timer: PerformanceTimer,
+      skipRendering?: boolean
+    ) => Promise<ImageDataInterface>)
+  | null = null;
 
 // 异步加载wasmBridge模块
 const loadWasmBridge = async () => {
@@ -168,15 +185,21 @@ let ctx: OffscreenCanvasRenderingContext2D | null = null;
 // 异步加载OpenCV
 (async () => {
   try {
-    const response = await fetch('https://wasm-worker.oss-cn-nanjing.aliyuncs.com/opencv.wasm');
+    const response = await fetch(
+      'https://wasm-worker.oss-cn-nanjing.aliyuncs.com/opencv.wasm'
+    );
     if (!response.ok) {
-      throw new Error(`加载 wasm 失败： ${response.status} ${response.statusText}`);
+      throw new Error(
+        `加载 wasm 失败： ${response.status} ${response.statusText}`
+      );
     }
     const buffer = await response.arrayBuffer();
     self.Module.wasmBinary = buffer;
-    self.importScripts('https://wasm-worker.oss-cn-nanjing.aliyuncs.com/opencv.js');
+    self.importScripts(
+      'https://wasm-worker.oss-cn-nanjing.aliyuncs.com/opencv.js'
+    );
   } catch (error) {
-    console.error("在 worker 中加载 OpenCV 失败:", error);
+    console.error('在 worker 中加载 OpenCV 失败:', error);
     self.postMessage({ type: 'error', payload: '初始化 OpenCV 失败。' });
   }
 })();
@@ -197,21 +220,27 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
 
     case 'image-process':
       if (!payload.imageData || !payload.action) {
-        self.postMessage({ type: 'error', payload: '缺少必要的图像数据或操作类型' });
+        self.postMessage({
+          type: 'error',
+          payload: '缺少必要的图像数据或操作类型',
+        });
         return;
       }
 
       const jsFilter = pureJsFilters[payload.action];
 
       if (!self.cv && !jsFilter) {
-        console.error("OpenCV 尚未准备好。");
+        console.error('OpenCV 尚未准备好。');
         self.postMessage({ type: 'error', payload: 'OpenCV 尚未就绪。' });
         return;
       }
 
       if (!ctx) {
-        console.error("OffscreenCanvas 尚未初始化。");
-        self.postMessage({ type: 'error', payload: 'OffscreenCanvas 尚未初始化。' });
+        console.error('OffscreenCanvas 尚未初始化。');
+        self.postMessage({
+          type: 'error',
+          payload: 'OffscreenCanvas 尚未初始化。',
+        });
         return;
       }
 
@@ -266,13 +295,14 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
               imageData: resultImageData,
               isHistoryNavigation: payload.isHistoryNavigation || false,
               perfLog: perfLog,
-            }
+            },
           },
           [resultImageData.data.buffer]
         );
       } catch (error) {
-        console.error("图像处理时发生错误:", error);
-        const errorMessage = error instanceof Error ? error.message : '未知错误';
+        console.error('图像处理时发生错误:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : '未知错误';
         self.postMessage({ type: 'error', payload: errorMessage });
       }
       break;

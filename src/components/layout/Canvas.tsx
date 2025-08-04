@@ -12,7 +12,9 @@ import notificationService from '../../utils/notificationService';
 // 空状态提示组件
 const EmptyStatePrompt: React.FC = () => {
   const handleUploadClick = (): void => {
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
     fileInput?.click();
   };
 
@@ -21,8 +23,8 @@ const EmptyStatePrompt: React.FC = () => {
       <div className="text-center p-8 bg-white/80 dark:bg-gray-900/80 rounded-lg shadow-xl backdrop-blur-sm">
         <h2 className="text-2xl font-semibold mb-2">未加载图像</h2>
         <p className="text-gray-500 dark:text-gray-400">上传一张图片开始编辑</p>
-        <button 
-          onClick={handleUploadClick} 
+        <button
+          onClick={handleUploadClick}
           className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
         >
           上传图片
@@ -42,19 +44,19 @@ interface CropControlsProps {
 const CropControls: React.FC<CropControlsProps> = ({ onConfirm, onCancel }) => (
   <div className="flex items-center space-x-2">
     <Tooltip title="确认">
-      <Button 
-        type="text" 
-        icon={<Check size={20} />} 
-        onClick={onConfirm} 
-        className="text-green-500 hover:text-green-600" 
+      <Button
+        type="text"
+        icon={<Check size={20} />}
+        onClick={onConfirm}
+        className="text-green-500 hover:text-green-600"
       />
     </Tooltip>
     <Tooltip title="取消">
-      <Button 
-        type="text" 
-        icon={<X size={20} />} 
-        onClick={onCancel} 
-        className="text-red-500 hover:text-red-600" 
+      <Button
+        type="text"
+        icon={<X size={20} />}
+        onClick={onCancel}
+        className="text-red-500 hover:text-red-600"
       />
     </Tooltip>
   </div>
@@ -66,7 +68,7 @@ interface CanvasProps {
 }
 
 const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
-  const { 
+  const {
     currentImage,
     getCurrentImageData,
     canUndo,
@@ -75,23 +77,23 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
     redo,
     clearHistory,
   } = useImageStore();
-  
-  const { 
+
+  const {
     isCropMode,
     setCropMode,
     cropArea,
-    imageWorker, 
-    workerReady, 
+    imageWorker,
+    workerReady,
     opencvLoaded,
-    zoom
+    zoom,
   } = useEditorStore();
 
   const { loading, setLoading } = useUiStore();
   const { processEdit } = useImageProcessing();
-  
-  const { 
-    canvasRef, 
-    cropCanvasRef, 
+
+  const {
+    canvasRef,
+    cropCanvasRef,
     handleCanvasMouseDown,
     handleCanvasMouseMove,
     handleCanvasMouseUp,
@@ -100,12 +102,15 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
   // 初始化Canvas与Worker连接
   useEffect(() => {
     if (canvasRef.current && imageWorker && opencvLoaded) {
-      console.log("开始初始化Canvas与Worker连接");
+      console.log('开始初始化Canvas与Worker连接');
       const offscreen = canvasRef.current.transferControlToOffscreen();
-      imageWorker.postMessage({ 
-        type: 'init', 
-        payload: { canvas: offscreen } 
-      }, [offscreen]);
+      imageWorker.postMessage(
+        {
+          type: 'init',
+          payload: { canvas: offscreen },
+        },
+        [offscreen]
+      );
     }
   }, [canvasRef, imageWorker, opencvLoaded]);
 
@@ -115,13 +120,13 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
     const prevState = undo();
     if (prevState && workerReady && imageWorker) {
       setLoading(true);
-      imageWorker.postMessage({ 
-        type: 'image-process', 
-        payload: { 
-          imageData: prevState, 
-          action: 'original', 
-          isHistoryNavigation: true 
-        } 
+      imageWorker.postMessage({
+        type: 'image-process',
+        payload: {
+          imageData: prevState,
+          action: 'original',
+          isHistoryNavigation: true,
+        },
       });
     }
   };
@@ -131,13 +136,13 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
     const nextState = redo();
     if (nextState && workerReady && imageWorker) {
       setLoading(true);
-      imageWorker.postMessage({ 
-        type: 'image-process', 
-        payload: { 
-          imageData: nextState, 
-          action: 'original', 
-          isHistoryNavigation: true 
-        } 
+      imageWorker.postMessage({
+        type: 'image-process',
+        payload: {
+          imageData: nextState,
+          action: 'original',
+          isHistoryNavigation: true,
+        },
       });
     }
   };
@@ -146,7 +151,7 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
     if (!currentImage || loading) return;
 
     notificationService.confirm(
-      '恢复原始图像', 
+      '恢复原始图像',
       '您确定要撤销所有操作，恢复到原始图像吗？',
       () => {
         setLoading(true);
@@ -163,33 +168,43 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
       notificationService.warning('请选择一个有效的裁剪区域');
       return;
     }
-    
+
     const currentImageData = getCurrentImageData();
     if (!currentImageData) return;
 
     const safeArea = {
       x: Math.round(Math.max(0, Math.min(cropArea.x, currentImageData.width))),
       y: Math.round(Math.max(0, Math.min(cropArea.y, currentImageData.height))),
-      width: Math.round(Math.min(cropArea.width, currentImageData.width - Math.max(0, cropArea.x))),
-      height: Math.round(Math.min(cropArea.height, currentImageData.height - Math.max(0, cropArea.y)))
+      width: Math.round(
+        Math.min(
+          cropArea.width,
+          currentImageData.width - Math.max(0, cropArea.x)
+        )
+      ),
+      height: Math.round(
+        Math.min(
+          cropArea.height,
+          currentImageData.height - Math.max(0, cropArea.y)
+        )
+      ),
     };
-    
+
     processEdit('crop', safeArea);
     setCropMode(false);
   };
-  
+
   const handleCropCancel = (): void => {
     setCropMode(false);
   };
-  
+
   // 绘制裁剪选区覆盖层
   useEffect(() => {
     const cropCanvas = cropCanvasRef.current;
     if (!cropCanvas || !isCropMode) return;
-    
+
     const cropCtx = cropCanvas.getContext('2d');
     const currentImageData = getCurrentImageData();
-    
+
     if (!currentImageData || !cropCtx) return;
 
     cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
@@ -201,17 +216,21 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
 
     cropCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-    
+
     if (cropArea.width > 0 && cropArea.height > 0) {
-      cropCtx.clearRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
+      cropCtx.clearRect(
+        cropArea.x,
+        cropArea.y,
+        cropArea.width,
+        cropArea.height
+      );
     }
-    
+
     cropCtx.strokeStyle = '#00ff00';
     cropCtx.lineWidth = 2;
     cropCtx.strokeRect(cropArea.x, cropArea.y, cropArea.width, cropArea.height);
-    
   }, [cropArea, isCropMode, getCurrentImageData, cropCanvasRef]);
-  
+
   // 同步裁剪Canvas位置和大小
   useEffect(() => {
     const mainCanvas = canvasRef.current;
@@ -222,14 +241,14 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
       const mainCanvasRect = mainCanvas.getBoundingClientRect();
       const parentElement = cropCanvas.parentElement;
       if (!parentElement) return;
-      
+
       const parentRect = parentElement.getBoundingClientRect();
 
       cropCanvas.style.width = `${mainCanvasRect.width}px`;
       cropCanvas.style.height = `${mainCanvasRect.height}px`;
       cropCanvas.style.top = `${mainCanvasRect.top - parentRect.top}px`;
       cropCanvas.style.left = `${mainCanvasRect.left - parentRect.left}px`;
-      
+
       cropCanvas.style.display = 'block';
     } else {
       cropCanvas.style.display = 'none';
@@ -242,64 +261,66 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
       <div className="flex items-center justify-between p-2 h-12 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-2">
           <Tooltip title="撤销">
-            <Button 
-              type="text" 
-              icon={<Undo size={20} />} 
-              onClick={handleUndo} 
-              disabled={!canUndo || loading} 
+            <Button
+              type="text"
+              icon={<Undo size={20} />}
+              onClick={handleUndo}
+              disabled={!canUndo || loading}
             />
           </Tooltip>
           <Tooltip title="重做">
-            <Button 
-              type="text" 
-              icon={<Redo size={20} />} 
-              onClick={handleRedo} 
-              disabled={!canRedo || loading} 
+            <Button
+              type="text"
+              icon={<Redo size={20} />}
+              onClick={handleRedo}
+              disabled={!canRedo || loading}
             />
           </Tooltip>
           <Tooltip title="重置所有操作">
-            <Button 
-              type="text" 
-              icon={<Trash2 size={20} />} 
-              onClick={handleRevertToOriginal} 
-              disabled={!currentImage || loading} 
+            <Button
+              type="text"
+              icon={<Trash2 size={20} />}
+              onClick={handleRevertToOriginal}
+              disabled={!currentImage || loading}
             />
           </Tooltip>
         </div>
-        
-        {isCropMode && <CropControls onConfirm={handleCropConfirm} onCancel={handleCropCancel} />}
-        
-        <div className='text-sm text-gray-500 dark:text-gray-400'>
-          {loading 
-            ? "处理中..." 
-            : (workerReady 
-                ? "Worker 已就绪" 
-                : (opencvLoaded 
-                    ? "正在初始化Canvas..." 
-                    : "正在加载 OpenCV..."
-                  )
-              )
-          }
+
+        {isCropMode && (
+          <CropControls
+            onConfirm={handleCropConfirm}
+            onCancel={handleCropCancel}
+          />
+        )}
+
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {loading
+            ? '处理中...'
+            : workerReady
+              ? 'Worker 已就绪'
+              : opencvLoaded
+                ? '正在初始化Canvas...'
+                : '正在加载 OpenCV...'}
         </div>
       </div>
 
       {/* 画布区域 */}
-      <div 
+      <div
         ref={containerRef}
         className="flex-1 grid place-items-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative"
       >
         {loading && <LoadingOverlay />}
-        
-        <canvas 
-          id="canvas" 
-          ref={canvasRef} 
+
+        <canvas
+          id="canvas"
+          ref={canvasRef}
           className={`shadow-lg rounded-md ${!currentImage ? 'invisible' : ''}`}
           style={{
             width: currentImage ? `${currentImage.width * zoom}px` : 'auto',
             height: currentImage ? `${currentImage.height * zoom}px` : 'auto',
           }}
         />
-        
+
         <canvas
           id="crop-canvas"
           ref={cropCanvasRef}
@@ -310,7 +331,7 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
           onMouseUp={handleCanvasMouseUp}
           onMouseLeave={handleCanvasMouseUp}
         />
-        
+
         {!currentImage && <EmptyStatePrompt />}
       </div>
     </main>
