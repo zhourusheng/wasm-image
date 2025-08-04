@@ -1,4 +1,5 @@
 import type { ImageDataInterface, FilterParams, ExportFormat } from '../types';
+import { toStandardImageData } from '../types';
 
 // 滤镜配置接口
 export interface FilterConfig {
@@ -64,7 +65,10 @@ export function applyGaussianBlurJS(
 
   // 归一化
   for (let i = 0; i < kernel.length; i++) {
-    kernel[i] /= kernelSum;
+    const kernelValue = kernel[i];
+    if (kernelValue !== undefined) {
+      kernel[i] = kernelValue / kernelSum;
+    }
   }
 
   const tempR = new Uint8ClampedArray(data.length / 4);
@@ -82,9 +86,19 @@ export function applyGaussianBlurJS(
         const pixelX = Math.max(0, Math.min(width - 1, x + i)); // 处理边缘
         const kernelValue = kernel[i + radius];
         const pixelIndex = (y * width + pixelX) * 4;
-        r += data[pixelIndex] * kernelValue;
-        g += data[pixelIndex + 1] * kernelValue;
-        b += data[pixelIndex + 2] * kernelValue;
+        const pixelData = data[pixelIndex];
+        const pixelData1 = data[pixelIndex + 1];
+        const pixelData2 = data[pixelIndex + 2];
+        if (
+          pixelData !== undefined &&
+          pixelData1 !== undefined &&
+          pixelData2 !== undefined &&
+          kernelValue !== undefined
+        ) {
+          r += pixelData * kernelValue;
+          g += pixelData1 * kernelValue;
+          b += pixelData2 * kernelValue;
+        }
       }
       const tempIndex = y * width + x;
       tempR[tempIndex] = r;
@@ -103,15 +117,28 @@ export function applyGaussianBlurJS(
         const pixelY = Math.max(0, Math.min(height - 1, y + i));
         const kernelValue = kernel[i + radius];
         const tempIndex = pixelY * width + x;
-        r += tempR[tempIndex] * kernelValue;
-        g += tempG[tempIndex] * kernelValue;
-        b += tempB[tempIndex] * kernelValue;
+        const tempRData = tempR[tempIndex];
+        const tempGData = tempG[tempIndex];
+        const tempBData = tempB[tempIndex];
+        if (
+          tempRData !== undefined &&
+          tempGData !== undefined &&
+          tempBData !== undefined &&
+          kernelValue !== undefined
+        ) {
+          r += tempRData * kernelValue;
+          g += tempGData * kernelValue;
+          b += tempBData * kernelValue;
+        }
       }
       const finalIndex = (y * width + x) * 4;
       finalData[finalIndex] = r;
       finalData[finalIndex + 1] = g;
       finalData[finalIndex + 2] = b;
-      finalData[finalIndex + 3] = data[finalIndex + 3]; // 保持 alpha 通道
+      const alphaValue = data[finalIndex + 3];
+      if (alphaValue !== undefined) {
+        finalData[finalIndex + 3] = alphaValue; // 保持 alpha 通道
+      }
     }
   }
 
@@ -131,9 +158,11 @@ export function applySepiaJS(
     const g = data[i + 1];
     const b = data[i + 2];
 
-    data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
-    data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
-    data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+    if (r !== undefined && g !== undefined && b !== undefined) {
+      data[i] = Math.min(255, r * 0.393 + g * 0.769 + b * 0.189);
+      data[i + 1] = Math.min(255, r * 0.349 + g * 0.686 + b * 0.168);
+      data[i + 2] = Math.min(255, r * 0.272 + g * 0.534 + b * 0.131);
+    }
   }
 
   return new ImageData(
@@ -156,12 +185,14 @@ export function applyGrayscaleJS(
     const g = data[i + 1];
     const b = data[i + 2];
 
-    // 使用标准灰度转换公式
-    const gray = Math.round(r * 0.299 + g * 0.587 + b * 0.114);
+    if (r !== undefined && g !== undefined && b !== undefined) {
+      // 使用标准灰度转换公式
+      const gray = Math.round(r * 0.299 + g * 0.587 + b * 0.114);
 
-    data[i] = gray;
-    data[i + 1] = gray;
-    data[i + 2] = gray;
+      data[i] = gray;
+      data[i + 1] = gray;
+      data[i + 2] = gray;
+    }
   }
 
   return new ImageData(
@@ -181,9 +212,18 @@ export function adjustBrightnessJS(
   const data = new Uint8ClampedArray(imageData.data);
 
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = Math.max(0, Math.min(255, data[i] + brightness));
-    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + brightness));
-    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + brightness));
+    const currentR = data[i];
+    const currentG = data[i + 1];
+    const currentB = data[i + 2];
+    if (
+      currentR !== undefined &&
+      currentG !== undefined &&
+      currentB !== undefined
+    ) {
+      data[i] = Math.max(0, Math.min(255, currentR + brightness));
+      data[i + 1] = Math.max(0, Math.min(255, currentG + brightness));
+      data[i + 2] = Math.max(0, Math.min(255, currentB + brightness));
+    }
   }
 
   return new ImageData(
@@ -204,15 +244,24 @@ export function adjustContrastJS(
   const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
 
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = Math.max(0, Math.min(255, factor * (data[i] - 128) + 128));
-    data[i + 1] = Math.max(
-      0,
-      Math.min(255, factor * (data[i + 1] - 128) + 128)
-    );
-    data[i + 2] = Math.max(
-      0,
-      Math.min(255, factor * (data[i + 2] - 128) + 128)
-    );
+    const currentValue = data[i];
+    if (currentValue !== undefined) {
+      data[i] = Math.max(0, Math.min(255, factor * (currentValue - 128) + 128));
+    }
+    const currentValue1 = data[i + 1];
+    if (currentValue1 !== undefined) {
+      data[i + 1] = Math.max(
+        0,
+        Math.min(255, factor * (currentValue1 - 128) + 128)
+      );
+    }
+    const currentValue2 = data[i + 2];
+    if (currentValue2 !== undefined) {
+      data[i + 2] = Math.max(
+        0,
+        Math.min(255, factor * (currentValue2 - 128) + 128)
+      );
+    }
   }
 
   return new ImageData(
@@ -276,7 +325,7 @@ export function imageDataToBlob(
 
     canvas.width = imageData.width;
     canvas.height = imageData.height;
-    ctx.putImageData(imageData, 0, 0);
+    ctx.putImageData(toStandardImageData(imageData), 0, 0);
 
     const mimeType =
       format === 'jpeg'

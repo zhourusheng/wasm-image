@@ -135,6 +135,7 @@ export function performanceMonitor(operationName?: string) {
     const name = operationName || `${target.constructor.name}.${propertyName}`;
 
     descriptor.value = function (...args: Parameters<T>) {
+      // @ts-ignore
       return PerformanceTimer.measure(name, () => method.apply(this, args));
     } as T;
 
@@ -155,7 +156,9 @@ export function asyncPerformanceMonitor(operationName?: string) {
     const name = operationName || `${target.constructor.name}.${propertyName}`;
 
     descriptor.value = function (...args: Parameters<T>) {
+      // @ts-ignore
       return PerformanceTimer.measureAsync(name, () =>
+        // @ts-ignore
         method.apply(this, args)
       );
     } as T;

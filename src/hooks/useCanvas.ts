@@ -1,8 +1,5 @@
-import { useRef, useCallback, RefObject } from 'react';
-import type { CropArea } from '../types';
-import useImageStore from '../store/imageStore';
+import React, { useRef, useCallback, RefObject } from 'react';
 import useEditorStore from '../store/editorStore';
-import useUiStore from '../store/uiStore';
 
 interface CanvasCoordinates {
   x: number;
@@ -10,9 +7,9 @@ interface CanvasCoordinates {
 }
 
 interface UseCanvasReturn {
-  canvasRef: RefObject<HTMLCanvasElement>;
-  cropCanvasRef: RefObject<HTMLCanvasElement>;
-  canvasContainerRef: RefObject<HTMLDivElement>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  cropCanvasRef: RefObject<HTMLCanvasElement | null>;
+  canvasContainerRef: RefObject<HTMLDivElement | null>;
   getCanvasCoordinates: (e: MouseEvent | React.MouseEvent) => CanvasCoordinates;
   handleCanvasMouseDown: (e: React.MouseEvent<HTMLCanvasElement>) => void;
   handleCanvasMouseMove: (e: React.MouseEvent<HTMLCanvasElement>) => void;
@@ -20,14 +17,13 @@ interface UseCanvasReturn {
 }
 
 const useCanvas = (
-  containerRef: RefObject<HTMLDivElement>
+  _containerRef: RefObject<HTMLDivElement | null>
 ): UseCanvasReturn => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cropCanvasRef = useRef<HTMLCanvasElement>(null);
-  const canvasContainerRef = containerRef;
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
 
-  const { imageSize } = useImageStore();
-  const { isCropMode, cropArea, setCropArea, zoom, pan } = useEditorStore();
+  const { isCropMode, cropArea, setCropArea } = useEditorStore();
 
   // 内部状态管理
   const isDragging = useRef<boolean>(false);

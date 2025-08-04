@@ -8,6 +8,7 @@ import useImageProcessing from '../../hooks/useImageProcessing';
 import { getImageDataFromImage } from '../../utils/imageUtils';
 import notificationService from '../../utils/notificationService';
 import type { ImageDataInterface } from '../../types';
+import { toStandardImageData } from '../../types';
 
 // Canvas预览组件Props接口
 interface CanvasPreviewProps {
@@ -25,7 +26,7 @@ const CanvasPreview: React.FC<CanvasPreviewProps> = ({ imageData }) => {
       canvas.height = imageData.height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.putImageData(imageData, 0, 0);
+        ctx.putImageData(toStandardImageData(imageData), 0, 0);
       }
     }
   }, [imageData]);
@@ -130,7 +131,7 @@ const CollageMode: React.FC = () => {
         throw new Error('无法获取Canvas上下文');
       }
 
-      tempCtx.putImageData(previewData, 0, 0);
+      tempCtx.putImageData(toStandardImageData(previewData), 0, 0);
 
       const blob = await new Promise<Blob | null>(resolve =>
         tempCanvas.toBlob(resolve, 'image/png')

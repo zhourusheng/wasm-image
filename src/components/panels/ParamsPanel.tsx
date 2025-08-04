@@ -2,7 +2,7 @@ import React from 'react';
 import { Slider, Button } from 'antd';
 import useEditorStore from '../../store/editorStore';
 import useImageProcessing from '../../hooks/useImageProcessing';
-import type { FilterParams, ToolType } from '../../types';
+import type { FilterParams } from '../../types';
 
 // 控制组件通用Props接口
 interface ControlProps {

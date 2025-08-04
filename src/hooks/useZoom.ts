@@ -10,10 +10,10 @@ interface UseZoomReturn {
 }
 
 const useZoom = (
-  canvasContainerRef: RefObject<HTMLDivElement>
+  canvasContainerRef: RefObject<HTMLDivElement | null>
 ): UseZoomReturn => {
   const { currentImage } = useImageStore();
-  const { zoom, setZoom, setUserHasZoomed } = useUiStore();
+  const { setZoom, setUserHasZoomed } = useUiStore();
   const { setZoom: setEditorZoom } = useEditorStore();
 
   const handleManualZoom = (newZoom: number) => {

@@ -5,7 +5,6 @@ import Toolbar from './components/layout/Toolbar';
 import Canvas from './components/layout/Canvas';
 import useImageProcessing from './hooks/useImageProcessing';
 import useEditorStore from './store/editorStore';
-import useUiStore from './store/uiStore';
 
 // 懒加载的组件 - 这些组件不会包含在初始bundle中
 const ParamsPanel = lazy(() => import('./components/panels/ParamsPanel'));

@@ -3,11 +3,10 @@ import type {
   ImageStoreState,
   ImageDataInterface,
   HistoryItem,
-  FilterParams,
 } from '../types';
 import HistoryManager from '../utils/historyManager';
+import { loadImageFromFile, getImageDataFromImage } from '../utils/imageUtils';
 import notificationService from '../utils/notificationService';
-import { loadImageFromFile } from '../utils/imageUtils';
 
 interface FileInfo {
   size: number;
@@ -69,21 +68,8 @@ const useImageStore = create<ImageStoreState & ImageStoreInternalState>(
       }
     },
 
-    updateImage: (
-      imageData: ImageDataInterface,
-      operation?: string,
-      params?: FilterParams
-    ) => {
+    updateImage: (imageData: ImageDataInterface) => {
       const historyManager = get().historyManager;
-
-      // 创建历史项
-      const historyItem: HistoryItem = {
-        id: `${Date.now()}-${Math.random()}`,
-        imageData,
-        operation,
-        params,
-        timestamp: Date.now(),
-      };
 
       historyManager.add(imageData);
 
@@ -150,7 +136,8 @@ const useImageStore = create<ImageStoreState & ImageStoreInternalState>(
         // 更新原始文件信息
         set({ originalFileInfo: { size: file.size, name: file.name } });
         const loadedImage = await loadImageFromFile(file);
-        get().setImage(loadedImage);
+        const imageData = await getImageDataFromImage(loadedImage);
+        get().setImage(imageData);
       } catch (error) {
         console.error(error);
         const errorMessage =

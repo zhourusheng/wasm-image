@@ -176,13 +176,21 @@ export async function wasmProcessImage(
             b = data[i + 2];
 
           // 计算亮度 (grayscale value)
-          const gray = r * R_LUMINANCE + g * G_LUMINANCE + b * B_LUMINANCE;
+          if (r !== undefined && g !== undefined && b !== undefined) {
+            const gray = r * R_LUMINANCE + g * G_LUMINANCE + b * B_LUMINANCE;
 
-          // 应用饱和度公式: NewColor = Gray + factor * (Color - Gray)
-          // 并确保结果在 0-255 范围内
-          data[i] = Math.max(0, Math.min(255, gray + factor * (r - gray)));
-          data[i + 1] = Math.max(0, Math.min(255, gray + factor * (g - gray)));
-          data[i + 2] = Math.max(0, Math.min(255, gray + factor * (b - gray)));
+            // 应用饱和度公式: NewColor = Gray + factor * (Color - Gray)
+            // 并确保结果在 0-255 范围内
+            data[i] = Math.max(0, Math.min(255, gray + factor * (r - gray)));
+            data[i + 1] = Math.max(
+              0,
+              Math.min(255, gray + factor * (g - gray))
+            );
+            data[i + 2] = Math.max(
+              0,
+              Math.min(255, gray + factor * (b - gray))
+            );
+          }
         }
 
         // 尽管我们在 JS 中直接修改了数据，但为了适应现有的渲染流程，

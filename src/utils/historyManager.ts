@@ -1,4 +1,4 @@
-import type { ImageDataInterface, HistoryItem } from '../types';
+import type { ImageDataInterface, HistoryItem, FilterParams } from '../types';
 
 /**
  * 历史记录管理类
@@ -43,7 +43,7 @@ export default class HistoryManager {
       id: `${Date.now()}-${Math.random()}`,
       imageData: clonedData,
       operation,
-      params,
+      params: params as FilterParams | undefined,
       timestamp: Date.now(),
     };
 
@@ -121,7 +121,8 @@ export default class HistoryManager {
    */
   getCurrentState(): ImageDataInterface | null {
     if (this.undoStack.length === 0) return null;
-    return this.undoStack[this.undoStack.length - 1];
+    const lastItem = this.undoStack[this.undoStack.length - 1];
+    return lastItem || null;
   }
 
   /**

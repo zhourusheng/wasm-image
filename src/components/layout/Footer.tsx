@@ -13,13 +13,12 @@ import useUiStore from '../../store/uiStore';
 import useZoom from '../../hooks/useZoom';
 
 interface FooterProps {
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
 }
 
 const Footer: React.FC<FooterProps> = ({ containerRef }) => {
-  const { currentImage, originalFileInfo, getCurrentImageData } =
-    useImageStore();
-  const { imageWorker, zoom } = useEditorStore();
+  const { currentImage, originalFileInfo } = useImageStore();
+  const { zoom } = useEditorStore();
   const { loading } = useUiStore();
   const { handleManualZoom, resetToFitZoom, resetToOriginalZoom } =
     useZoom(containerRef);

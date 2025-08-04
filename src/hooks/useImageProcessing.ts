@@ -20,7 +20,7 @@ interface ProcessedPayload {
 
 export const useImageProcessing = () => {
   const { currentImage, updateImage, setImage, clearHistory } = useImageStore();
-  const { imageWorker, workerReady, setImageWorker } = useEditorStore();
+  const { imageWorker, workerReady } = useEditorStore();
   const { setLoading, setCanvasRendered, updateDeviceInfo } = useUiStore();
 
   // 核心图像处理函数

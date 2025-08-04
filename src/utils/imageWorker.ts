@@ -1,10 +1,6 @@
 // imageWorker.ts
-import type {
-  ImageDataInterface,
-  FilterParams,
-  WorkerMessage,
-  PerformanceMetrics,
-} from '../types';
+import type { ImageDataInterface, FilterParams } from '../types';
+import { toStandardImageData } from '../types';
 
 // Worker消息接口
 interface WorkerMessageEvent {
@@ -56,15 +52,21 @@ class PerformanceTimer {
     this.lastStepTime = now;
   }
 
-  end(): PerformanceMetrics {
+  end(): {
+    operation: string;
+    operationName: string;
+    totalTime: number;
+    steps: Array<{ name: string; elapsed: number }>;
+    metadata: Record<string, unknown>;
+  } {
     this.step('end');
     const totalTime = this.lastStepTime - this.startTime;
     return {
       operation: this.operationName,
-      metadata: this.metadata,
-      totalTime: parseFloat(totalTime.toFixed(2)),
+      operationName: this.operationName,
+      totalTime,
       steps: this.steps,
-      timestamp: new Date().toISOString(),
+      metadata: this.metadata,
     };
   }
 }
@@ -77,12 +79,14 @@ function applySepiaJS(imageData: ImageDataInterface): ImageDataInterface {
     const r = data[i],
       g = data[i + 1],
       b = data[i + 2];
-    const newR = r * 0.393 + g * 0.769 + b * 0.189;
-    const newG = r * 0.349 + g * 0.686 + b * 0.168;
-    const newB = r * 0.272 + g * 0.534 + b * 0.131;
-    data[i] = Math.min(255, newR);
-    data[i + 1] = Math.min(255, newG);
-    data[i + 2] = Math.min(255, newB);
+    if (r !== undefined && g !== undefined && b !== undefined) {
+      const newR = r * 0.393 + g * 0.769 + b * 0.189;
+      const newG = r * 0.349 + g * 0.686 + b * 0.168;
+      const newB = r * 0.272 + g * 0.534 + b * 0.131;
+      data[i] = Math.min(255, newR);
+      data[i + 1] = Math.min(255, newG);
+      data[i + 2] = Math.min(255, newB);
+    }
   }
   return imageData;
 }
@@ -96,37 +100,65 @@ function applyGrayscaleJS(imageData: ImageDataInterface): ImageDataInterface {
     const r = data[i],
       g = data[i + 1],
       b = data[i + 2];
-    const gray = r * LUMINANCE_R + g * LUMINANCE_G + b * LUMINANCE_B;
-    data[i] = data[i + 1] = data[i + 2] = gray;
+    if (r !== undefined && g !== undefined && b !== undefined) {
+      const gray = r * LUMINANCE_R + g * LUMINANCE_G + b * LUMINANCE_B;
+      data[i] = gray;
+      data[i + 1] = gray;
+      data[i + 2] = gray;
+    }
   }
   return imageData;
 }
 
 function applyBrightnessJS(
   imageData: ImageDataInterface,
-  params: FilterParams
+  params?: FilterParams
 ): ImageDataInterface {
   const data = imageData.data;
-  const delta = (params.delta as number) || 0;
+  const delta = (params?.delta as number) || 0;
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = Math.max(0, Math.min(255, data[i] + delta));
-    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + delta));
-    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + delta));
+    const currentR = data[i];
+    const currentG = data[i + 1];
+    const currentB = data[i + 2];
+    if (
+      currentR !== undefined &&
+      currentG !== undefined &&
+      currentB !== undefined
+    ) {
+      data[i] = Math.max(0, Math.min(255, currentR + delta));
+      data[i + 1] = Math.max(0, Math.min(255, currentG + delta));
+      data[i + 2] = Math.max(0, Math.min(255, currentB + delta));
+    }
   }
   return imageData;
 }
 
 function applyContrastJS(
   imageData: ImageDataInterface,
-  params: FilterParams
+  params?: FilterParams
 ): ImageDataInterface {
   const data = imageData.data;
-  const factor = (params.factor as number) || 1;
+  const factor = (params?.factor as number) || 1;
   const intercept = 128 - factor * 128;
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = Math.max(0, Math.min(255, data[i] * factor + intercept));
-    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] * factor + intercept));
-    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] * factor + intercept));
+    const currentValueR = data[i];
+    const currentValueG = data[i + 1];
+    const currentValueB = data[i + 2];
+    if (
+      currentValueR !== undefined &&
+      currentValueG !== undefined &&
+      currentValueB !== undefined
+    ) {
+      data[i] = Math.max(0, Math.min(255, currentValueR * factor + intercept));
+      data[i + 1] = Math.max(
+        0,
+        Math.min(255, currentValueG * factor + intercept)
+      );
+      data[i + 2] = Math.max(
+        0,
+        Math.min(255, currentValueB * factor + intercept)
+      );
+    }
   }
   return imageData;
 }
@@ -264,7 +296,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
 
           // 新增：如果有skipRendering标记，跳过绘制到canvas
           if (!payload.skipRendering) {
-            ctx.putImageData(resultImageData, 0, 0);
+            ctx.putImageData(toStandardImageData(resultImageData), 0, 0);
             timer.step('render_to_offscreen');
           }
         } else {

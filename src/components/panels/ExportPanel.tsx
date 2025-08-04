@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
 import { Slider, Button, Modal, Input, message } from 'antd';
 import useImageStore from '../../store/imageStore';
 import useUiStore from '../../store/uiStore';

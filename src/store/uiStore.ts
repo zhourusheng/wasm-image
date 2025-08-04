@@ -13,6 +13,7 @@ import {
   logPerformanceToConsole,
   PerformanceTimer,
 } from '../utils/performanceLogger';
+import { toStandardImageData } from '../types';
 
 interface ExportParamsInternal {
   quality: number;
@@ -268,7 +269,9 @@ const useUiStore = create<UIStoreState & UIStoreInternalState>((set, get) => ({
       tempCanvas.height = newHeight;
 
       // 将当前图像数据绘制到临时画布上，并进行缩放
-      const tempImage = await createImageBitmap(currentImageData);
+      const tempImage = await createImageBitmap(
+        toStandardImageData(currentImageData)
+      );
       timer.step('create_image_bitmap');
 
       tempCtx.drawImage(tempImage, 0, 0, newWidth, newHeight);

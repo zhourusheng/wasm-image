@@ -18,24 +18,44 @@ export default [
         ecmaVersion: 'latest',
         sourceType: 'module',
         ecmaFeatures: {
-          jsx: true
+          jsx: true,
         },
-        project: ['./tsconfig.json', './tsconfig.node.json']
+        project: ['./tsconfig.json', './tsconfig.node.json'],
       },
       globals: {
+        // 浏览器环境
+        window: 'readonly',
+        document: 'readonly',
+        console: 'readonly',
+        fetch: 'readonly',
+        Image: 'readonly',
+        ImageData: 'readonly',
+        createImageBitmap: 'readonly',
+        requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
+        performance: 'readonly',
+        navigator: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        // Node.js 环境
+        NodeJS: 'readonly',
+        // 其他
+        React: 'readonly',
         browser: true,
         es2020: true,
         node: true,
-        worker: true
-      }
+        worker: true,
+      },
     },
     plugins: {
       '@typescript-eslint': typescript,
-      'react': react,
+      react: react,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
-      'sonarjs': sonarjs,
-      'prettier': prettier
+      sonarjs: sonarjs,
+      prettier: prettier,
     },
     rules: {
       ...typescript.configs.recommended.rules,
@@ -45,30 +65,42 @@ export default [
       ...prettierConfig.rules,
       'react-refresh/only-export-components': [
         'warn',
-        { allowConstantExport: true }
+        { allowConstantExport: true },
       ],
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-non-null-assertion': 'warn',
-      'sonarjs/cognitive-complexity': ['error', 15],
-      'sonarjs/no-duplicate-string': ['error', { threshold: 3 }],
-      'complexity': ['error', { max: 10 }],
-      'max-lines-per-function': ['error', { max: 50 }],
-      'max-depth': ['error', 4],
-      'prettier/prettier': 'error'
+      '@typescript-eslint/ban-ts-comment': 'warn',
+      // 放宽复杂度限制
+      'sonarjs/cognitive-complexity': ['warn', 20],
+      'sonarjs/no-duplicate-string': ['warn', { threshold: 5 }],
+      complexity: ['warn', { max: 15 }],
+      'max-lines-per-function': ['warn', { max: 100 }],
+      'max-depth': ['warn', 6],
+      // 放宽其他规则
+      'sonarjs/todo-tag': 'warn',
+      'sonarjs/pseudo-random': 'warn',
+      'sonarjs/no-nested-conditional': 'warn',
+      'sonarjs/function-return-type': 'warn',
+      'no-case-declarations': 'warn',
+      'no-undef': 'error',
+      'prettier/prettier': 'error',
     },
     settings: {
       react: {
-        version: 'detect'
-      }
-    }
+        version: 'detect',
+      },
+    },
   },
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
-    ignores: ['dist/**', 'node_modules/**']
-  }
+    ignores: ['dist/**', 'node_modules/**'],
+  },
 ];

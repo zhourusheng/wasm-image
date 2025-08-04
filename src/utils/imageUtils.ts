@@ -1,4 +1,5 @@
 import type { ImageDataInterface } from '../types';
+import { toStandardImageData } from '../types';
 
 /**
  * 从文件对象加载图片
@@ -106,7 +107,7 @@ export const imageDataToCanvas = (
 
   canvas.width = imageData.width;
   canvas.height = imageData.height;
-  ctx.putImageData(imageData, 0, 0);
+  ctx.putImageData(toStandardImageData(imageData), 0, 0);
 
   return canvas;
 };
@@ -213,7 +214,7 @@ export const resizeImageData = (
 
   tempCanvas.width = imageData.width;
   tempCanvas.height = imageData.height;
-  tempCtx.putImageData(imageData, 0, 0);
+  tempCtx.putImageData(toStandardImageData(imageData), 0, 0);
 
   // 设置目标画布
   canvas.width = newWidth;

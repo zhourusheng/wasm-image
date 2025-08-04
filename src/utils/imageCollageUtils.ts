@@ -1,4 +1,5 @@
 import type { ImageDataInterface } from '../types';
+import { toStandardImageData } from '../types';
 import { loadImageFromFile, getImageDataFromImage } from './imageUtils';
 
 // 图像项接口
@@ -160,7 +161,7 @@ export function createHorizontalCollage(
   imagesDataArray.forEach(imageData => {
     // 垂直居中放置图片
     const yOffset = Math.floor((maxHeight - imageData.height) / 2);
-    ctx.putImageData(imageData, currentX, yOffset);
+    ctx.putImageData(toStandardImageData(imageData), currentX, yOffset);
     currentX += imageData.width + gap;
   });
 
@@ -202,7 +203,7 @@ export function createVerticalCollage(
   imagesDataArray.forEach(imageData => {
     // 水平居中放置图片
     const xOffset = Math.floor((maxWidth - imageData.width) / 2);
-    ctx.putImageData(imageData, xOffset, currentY);
+    ctx.putImageData(toStandardImageData(imageData), xOffset, currentY);
     currentY += imageData.height + gap;
   });
 
@@ -274,13 +275,22 @@ export function createGridCollage(
     const col = index % numColumns;
     const row = Math.floor(index / numColumns);
 
-    // 计算居中位置
-    const xOffset =
-      colXOffsets[col] + Math.floor((colWidths[col] - imageData.width) / 2);
-    const yOffset =
-      rowYOffsets[row] + Math.floor((rowHeights[row] - imageData.height) / 2);
+    const colXOffset = colXOffsets[col];
+    const colWidth = colWidths[col];
+    const rowYOffset = rowYOffsets[row];
+    const rowHeight = rowHeights[row];
 
-    ctx.putImageData(imageData, xOffset, yOffset);
+    if (
+      colXOffset !== undefined &&
+      colWidth !== undefined &&
+      rowYOffset !== undefined &&
+      rowHeight !== undefined
+    ) {
+      const xOffset = colXOffset + Math.floor((colWidth - imageData.width) / 2);
+      const yOffset =
+        rowYOffset + Math.floor((rowHeight - imageData.height) / 2);
+      ctx.putImageData(toStandardImageData(imageData), xOffset, yOffset);
+    }
   });
 
   return ctx.getImageData(0, 0, totalWidth, totalHeight) as ImageDataInterface;
@@ -329,7 +339,7 @@ export function createCustomCollage(
 
     if (!tempCtx) return;
 
-    tempCtx.putImageData(imageData, 0, 0);
+    tempCtx.putImageData(toStandardImageData(imageData), 0, 0);
 
     // 应用变换
     ctx.translate(x, y);

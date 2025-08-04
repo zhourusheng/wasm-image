@@ -1,13 +1,12 @@
 import { create } from 'zustand';
 import type {
   EditorStoreState,
-  ToolType,
   FilterParams,
+  ToolType,
   CropArea,
-  WorkerMessage,
 } from '../types';
 
-const useEditorStore = create<EditorStoreState>((set, get) => ({
+const useEditorStore = create<EditorStoreState>(set => ({
   // Worker和OpenCV状态
   workerReady: false,
   opencvLoaded: false,
@@ -45,7 +44,7 @@ const useEditorStore = create<EditorStoreState>((set, get) => ({
 
   updateToolParams: (newParams: Partial<FilterParams>) => {
     set(state => ({
-      toolParams: { ...state.toolParams, ...newParams },
+      toolParams: { ...state.toolParams, ...newParams } as FilterParams,
     }));
   },
 

@@ -10,11 +10,8 @@ import {
   createGridCollage,
   loadImagesFromFiles,
 } from '../utils/imageCollageUtils';
-import {
-  PerformanceTimer,
-  logPerformanceToConsole,
-} from '../utils/performanceLogger';
 import notificationService from '../utils/notificationService';
+import { toStandardImageData } from '../types';
 
 type CollageLayout = 'horizontal' | 'vertical' | 'grid';
 
@@ -157,7 +154,9 @@ const useCollageStore = create<CollageStoreState & CollageStoreInternalState>(
         ctx.rotate((item.rotation * Math.PI) / 180);
 
         // 创建临时ImageBitmap来绘制
-        const imageBitmap = await createImageBitmap(item.imageData);
+        const imageBitmap = await createImageBitmap(
+          toStandardImageData(item.imageData)
+        );
         ctx.drawImage(
           imageBitmap,
           -item.size.width / 2,

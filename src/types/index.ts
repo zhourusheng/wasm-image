@@ -8,6 +8,42 @@ export interface ImageDataInterface {
   colorSpace?: PredefinedColorSpace; // 兼容标准ImageData
 }
 
+// 类型守卫：检查是否为标准ImageData
+export function isStandardImageData(obj: any): obj is ImageData {
+  return obj instanceof ImageData;
+}
+
+// 类型守卫：检查是否为自定义ImageDataInterface
+export function isImageDataInterface(obj: any): obj is ImageDataInterface {
+  return (
+    obj &&
+    typeof obj === 'object' &&
+    'data' in obj &&
+    'width' in obj &&
+    'height' in obj &&
+    obj.data instanceof Uint8ClampedArray
+  );
+}
+
+// 转换为标准ImageData的辅助函数
+export function toStandardImageData(imgData: ImageDataInterface): ImageData {
+  if (isStandardImageData(imgData)) {
+    return imgData;
+  }
+  // 确保 data 是 ArrayBuffer 而不是 SharedArrayBuffer
+  const buffer = imgData.data.buffer;
+  const uint8Array = new Uint8ClampedArray(
+    buffer instanceof SharedArrayBuffer ? buffer.slice(0) : buffer,
+    imgData.data.byteOffset,
+    imgData.data.length
+  );
+
+  // 使用类型断言来避免 TypeScript 的严格类型检查
+  return new (ImageData as any)(uint8Array, imgData.width, imgData.height, {
+    colorSpace: imgData.colorSpace,
+  });
+}
+
 // 滤镜参数接口
 export interface FilterParams {
   [key: string]: number | string | boolean;
@@ -73,8 +109,8 @@ export interface ExportPreview {
 export interface HistoryItem {
   id: string;
   imageData: ImageDataInterface;
-  operation?: string;
-  params?: FilterParams;
+  operation: string | undefined;
+  params: FilterParams | undefined;
   timestamp: number;
 }
 
@@ -145,6 +181,8 @@ export interface ImageStoreState {
   historyIndex: number;
   canUndo: boolean;
   canRedo: boolean;
+  imageSize: { width: number; height: number };
+  originalFileInfo: { size: number; name: string };
   // 方法
   setImage: (imageData: ImageDataInterface) => void;
   updateImage: (
@@ -155,6 +193,12 @@ export interface ImageStoreState {
   undo: () => ImageDataInterface | null;
   redo: () => ImageDataInterface | null;
   clearHistory: () => void;
+  getCurrentImageData: () => ImageDataInterface | null;
+  setOriginalFileInfo: (fileInfo: { size: number; name: string }) => void;
+  revertToOriginal: () => ImageDataInterface | null;
+  reset: () => void;
+  loadImage: (file: File) => Promise<void>;
+  loadImageFromUrl: (url: string) => Promise<HTMLImageElement | null>;
 }
 
 export interface EditorStoreState {
@@ -190,6 +234,9 @@ export interface UIStoreState {
   showExportPanel: boolean;
   showParamsPanel: boolean;
   darkMode: boolean;
+  zoom: number;
+  userHasZoomed: boolean;
+  isCanvasRendered: boolean;
   notifications: Array<{
     id: string;
     type: 'success' | 'error' | 'warning' | 'info';
@@ -200,12 +247,16 @@ export interface UIStoreState {
   featureSupport: FeatureSupport;
   // 方法
   setLoading: (loading: boolean, text?: string) => void;
+  setCanvasRendered: (isRendered: boolean) => void;
+  setZoom: (zoom: number) => void;
+  setUserHasZoomed: (hasZoomed: boolean) => void;
   showNotification: (
     type: 'success' | 'error' | 'warning' | 'info',
     message: string
   ) => void;
   hideNotification: (id: string) => void;
   toggleExportPanel: () => void;
+  closeExportPanel: () => void;
   toggleParamsPanel: () => void;
   toggleDarkMode: () => void;
   setExportPreview: (preview: ExportPreview | null) => void;
@@ -233,6 +284,16 @@ export interface CollageStoreState {
   setBackgroundColor: (color: string) => void;
   clearCanvas: () => void;
   exportCollage: () => Promise<ImageDataInterface>;
+  // 拼贴特定方法
+  reset: () => void;
+  setLayout: (layout: 'horizontal' | 'vertical' | 'grid') => void;
+  updateOptions: (
+    options: Partial<{ gap: number; backgroundColor: string; columns: number }>
+  ) => void;
+  addImages: (files: FileList | File[]) => Promise<void>;
+  removeImage: (index: number) => void;
+  generatePreview: () => Promise<void>;
+  setInitialImage: (image: any) => void;
 }
 
 // React 组件 Props 接口

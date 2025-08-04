@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, RefObject } from 'react';
+import React, { useEffect, RefObject } from 'react';
 import { Check, X, Undo, Redo, Trash2 } from 'lucide-react';
 import { Button, Tooltip } from 'antd';
 import useImageStore from '../../store/imageStore';
 import useEditorStore from '../../store/editorStore';
-import useUiStore from '../../store/uiStore';
 import useCanvas from '../../hooks/useCanvas';
+import useUiStore from '../../store/uiStore';
+import { toStandardImageData } from '../../types';
 import useImageProcessing from '../../hooks/useImageProcessing';
 import LoadingOverlay from '../common/LoadingOverlay';
 import notificationService from '../../utils/notificationService';
@@ -64,7 +65,7 @@ const CropControls: React.FC<CropControlsProps> = ({ onConfirm, onCancel }) => (
 
 // Canvas组件Props接口
 interface CanvasProps {
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
 }
 
 const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
@@ -210,7 +211,7 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
     cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
     cropCanvas.width = currentImageData.width;
     cropCanvas.height = currentImageData.height;
-    cropCtx.putImageData(currentImageData, 0, 0);
+    cropCtx.putImageData(toStandardImageData(currentImageData), 0, 0);
 
     if (!cropArea) return;
 

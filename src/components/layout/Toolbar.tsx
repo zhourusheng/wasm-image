@@ -58,7 +58,7 @@ const ToolButton: React.FC<ToolButtonProps> = ({
 };
 
 const Toolbar: React.FC = () => {
-  const { currentImage, getCurrentImageData } = useImageStore();
+  const { currentImage } = useImageStore();
   const { activeTool, setActiveTool, setCropMode } = useEditorStore();
   const { loading } = useUiStore();
   const { processEdit } = useImageProcessing();

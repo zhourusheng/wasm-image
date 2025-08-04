@@ -112,24 +112,26 @@ const notificationService = {
   ): void => {
     if (staticApp) {
       // 使用App实例的modal方法
-      staticApp.modal.confirm({
+      const modalConfig: any = {
         title,
         content,
         okText: '确定',
         cancelText: '取消',
-        onOk,
-        onCancel,
-      });
+      };
+      if (onOk) modalConfig.onOk = onOk;
+      if (onCancel) modalConfig.onCancel = onCancel;
+      staticApp.modal.confirm(modalConfig);
     } else {
       // 后备方案：如果App实例不可用，仍使用静态方法
-      Modal.confirm({
+      const modalConfig2: any = {
         title,
         content,
         okText: '确定',
         cancelText: '取消',
-        onOk,
-        onCancel,
-      });
+      };
+      if (onOk) modalConfig2.onOk = onOk;
+      if (onCancel) modalConfig2.onCancel = onCancel;
+      Modal.confirm(modalConfig2);
       console.warn(
         '建议使用initializeApp初始化notificationService以支持动态主题'
       );
