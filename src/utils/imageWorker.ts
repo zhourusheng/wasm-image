@@ -1,5 +1,5 @@
 // imageWorker.ts
-// 在Worker中直接定义类型和函数，避免import语句
+// 按照技术文档方案实现 - 使用经典Worker + importScripts
 
 // 图像数据接口 - 兼容标准ImageData
 interface ImageDataInterface {
@@ -56,7 +56,6 @@ interface WorkerMessageEvent {
 
 /**
  * 一个简单的性能计时器，用于记录多步骤操作的耗时。
- * （注意：此类直接内联在此文件中，以避免在非模块 Worker 中处理导入/导出的复杂性）
  */
 class PerformanceTimer {
   private operationName: string;
@@ -293,26 +292,34 @@ async function processWithWasm(
 
       case 'saturation': {
         const { factor } = params as { factor: number };
-
-        // 使用HSV颜色空间处理饱和度
-        dst = new self.cv.Mat();
+        const rgb = new self.cv.Mat();
+        self.cv.cvtColor(src, rgb, self.cv.COLOR_RGBA2RGB);
+        const srcChannels = new self.cv.MatVector();
+        self.cv.split(src, srcChannels);
+        const alpha = new self.cv.Mat();
+        srcChannels.get(3).copyTo(alpha);
         const hsv = new self.cv.Mat();
-        self.cv.cvtColor(src, hsv, self.cv.COLOR_RGB2HSV);
-
-        // 分离HSV通道
+        self.cv.cvtColor(rgb, hsv, self.cv.COLOR_RGB2HSV);
         const hsvChannels = new self.cv.MatVector();
         self.cv.split(hsv, hsvChannels);
-
-        // 调整饱和度通道（索引1）
         const satChannel = hsvChannels.get(1);
         satChannel.convertTo(satChannel, -1, factor, 0);
-
-        // 合并通道
         self.cv.merge(hsvChannels, hsv);
-        self.cv.cvtColor(hsv, dst, self.cv.COLOR_HSV2RGB);
-
+        self.cv.cvtColor(hsv, rgb, self.cv.COLOR_HSV2RGB);
+        dst = new self.cv.Mat();
+        self.cv.cvtColor(rgb, dst, self.cv.COLOR_RGB2RGBA);
+        const dstChannels = new self.cv.MatVector();
+        self.cv.split(dst, dstChannels);
+        const oldAlpha = dstChannels.get(3);
+        dstChannels.set(3, alpha);
+        self.cv.merge(dstChannels, dst);
+        rgb.delete();
+        srcChannels.delete();
         hsv.delete();
         hsvChannels.delete();
+        dstChannels.delete();
+        oldAlpha.delete();
+        alpha.delete();
         break;
       }
 
@@ -323,7 +330,7 @@ async function processWithWasm(
           blue: number;
         };
 
-        // 分离RGB通道
+        // 分离RGBA通道
         const channels = new self.cv.MatVector();
         self.cv.split(src, channels);
 
@@ -349,42 +356,47 @@ async function processWithWasm(
 
       case 'blur': {
         const { ksize = 5 } = params as { ksize?: number };
+        // 确保 ksize 是奇数，符合高斯模糊要求
+        const validKsize = ksize % 2 === 0 ? ksize + 1 : ksize;
         dst = new self.cv.Mat();
-        const kSize = new self.cv.Size(ksize, ksize);
-        self.cv.blur(src, dst, kSize);
-        kSize.delete();
+        const kernelSize = new self.cv.Size(validKsize, validKsize);
+        // 使用高斯模糊，性能优于普通模糊
+        self.cv.GaussianBlur(src, dst, kernelSize, 0);
+        kernelSize.delete();
         break;
       }
 
-      case 'grayscale': {
-        dst = new self.cv.Mat();
-        self.cv.cvtColor(src, dst, self.cv.COLOR_RGB2GRAY);
-        // 转换回RGB格式以保持一致性
-        const rgbDst = new self.cv.Mat();
-        self.cv.cvtColor(dst, rgbDst, self.cv.COLOR_GRAY2RGB);
-        dst.delete();
-        dst = rgbDst;
-        break;
-      }
+      // grayscale 操作由纯JS处理，性能更优
 
       case 'canny': {
         const { threshold1 = 50, threshold2 = 150 } = params as {
           threshold1?: number;
           threshold2?: number;
         };
+        const rgb = new self.cv.Mat();
+        self.cv.cvtColor(src, rgb, self.cv.COLOR_RGBA2RGB);
+        const srcChannels = new self.cv.MatVector();
+        self.cv.split(src, srcChannels);
+        const alpha = new self.cv.Mat();
+        srcChannels.get(3).copyTo(alpha);
         const gray = new self.cv.Mat();
-        self.cv.cvtColor(src, gray, self.cv.COLOR_RGB2GRAY);
-
+        self.cv.cvtColor(rgb, gray, self.cv.COLOR_RGB2GRAY);
+        const edges = new self.cv.Mat();
+        self.cv.Canny(gray, edges, threshold1, threshold2);
         dst = new self.cv.Mat();
-        self.cv.Canny(gray, dst, threshold1, threshold2);
-
-        // 转换回RGB格式
-        const rgbDst = new self.cv.Mat();
-        self.cv.cvtColor(dst, rgbDst, self.cv.COLOR_GRAY2RGB);
-
+        self.cv.cvtColor(edges, dst, self.cv.COLOR_GRAY2RGBA);
+        const dstChannels = new self.cv.MatVector();
+        self.cv.split(dst, dstChannels);
+        const oldAlpha = dstChannels.get(3);
+        dstChannels.set(3, alpha);
+        self.cv.merge(dstChannels, dst);
+        rgb.delete();
+        srcChannels.delete();
         gray.delete();
-        dst.delete();
-        dst = rgbDst;
+        edges.delete();
+        dstChannels.delete();
+        oldAlpha.delete();
+        alpha.delete();
         break;
       }
 
@@ -394,19 +406,30 @@ async function processWithWasm(
           maxval = 255,
           type = 0,
         } = params as { thresh?: number; maxval?: number; type?: number };
+        const rgb = new self.cv.Mat();
+        self.cv.cvtColor(src, rgb, self.cv.COLOR_RGBA2RGB);
+        const srcChannels = new self.cv.MatVector();
+        self.cv.split(src, srcChannels);
+        const alpha = new self.cv.Mat();
+        srcChannels.get(3).copyTo(alpha);
         const gray = new self.cv.Mat();
-        self.cv.cvtColor(src, gray, self.cv.COLOR_RGB2GRAY);
-
+        self.cv.cvtColor(rgb, gray, self.cv.COLOR_RGB2GRAY);
+        const thresholded = new self.cv.Mat();
+        self.cv.threshold(gray, thresholded, thresh, maxval, type);
         dst = new self.cv.Mat();
-        self.cv.threshold(gray, dst, thresh, maxval, type);
-
-        // 转换回RGB格式
-        const rgbDst = new self.cv.Mat();
-        self.cv.cvtColor(dst, rgbDst, self.cv.COLOR_GRAY2RGB);
-
+        self.cv.cvtColor(thresholded, dst, self.cv.COLOR_GRAY2RGBA);
+        const dstChannels = new self.cv.MatVector();
+        self.cv.split(dst, dstChannels);
+        const oldAlpha = dstChannels.get(3);
+        dstChannels.set(3, alpha);
+        self.cv.merge(dstChannels, dst);
+        rgb.delete();
+        srcChannels.delete();
         gray.delete();
-        dst.delete();
-        dst = rgbDst;
+        thresholded.delete();
+        dstChannels.delete();
+        oldAlpha.delete();
+        alpha.delete();
         break;
       }
 
@@ -423,22 +446,7 @@ async function processWithWasm(
         break;
       }
 
-      case 'sepia': {
-        // 使用transform实现sepia效果
-        const kernel = self.cv.matFromArray(
-          4,
-          4,
-          self.cv.CV_32FC1,
-          [
-            0.272, 0.534, 0.131, 0, 0.349, 0.686, 0.168, 0, 0.393, 0.769, 0.189,
-            0, 0, 0, 0, 1,
-          ]
-        );
-        dst = new self.cv.Mat();
-        self.cv.transform(src, dst, kernel);
-        kernel.delete();
-        break;
-      }
+      // sepia 操作由纯JS处理，性能更优
 
       case 'sharpen': {
         const kernel = self.cv.matFromArray(
@@ -482,19 +490,18 @@ async function processWithWasm(
   }
 }
 
-// 初始化Module
+// 初始化Module - 按照技术文档方案
 (self as any).Module = {
   noInitialRun: true,
   onRuntimeInitialized: () => {
     self.postMessage({ type: 'opencv-loaded' });
   },
-  wasmBinary: null,
 };
 
 let offscreenCanvas: OffscreenCanvas | null = null;
 let ctx: OffscreenCanvasRenderingContext2D | null = null;
 
-// 异步加载OpenCV
+// 按照技术文档方案 - 异步加载OpenCV
 (async () => {
   try {
     const response = await fetch(
@@ -601,10 +608,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
         let resultImageData: ImageDataInterface;
 
         if (jsFilter) {
-          timer.step('js_filter_start');
+          timer.step('js_engine_start');
+          console.log(`🚀 [纯JS引擎] 开始处理: ${payload.action}`);
           // 直接修改了 payload.imageData
           resultImageData = jsFilter(payload.imageData, payload.params);
-          timer.step('js_filter_end');
+          timer.step('js_engine_end');
 
           // 由于 JS 方案不经过 Wasm，需要手动渲染
           ctx.canvas.width = resultImageData.width;
@@ -615,15 +623,17 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
             ctx.putImageData(toStandardImageData(resultImageData), 0, 0);
             timer.step('render_to_offscreen');
           }
+          console.log(`✅ [纯JS引擎] 完成处理: ${payload.action}`);
         } else if (self.cv) {
           // 使用OpenCV/WASM处理
-          timer.step('wasm_processing_start');
+          timer.step('wasm_engine_start');
+          console.log(`⚡ [WASM引擎] 开始处理: ${payload.action} (OpenCV.js)`);
           resultImageData = await processWithWasm(
             payload.imageData,
             payload.action,
             payload.params
           );
-          timer.step('wasm_processing_end');
+          timer.step('wasm_engine_end');
 
           // 渲染到canvas
           ctx.canvas.width = resultImageData.width;
@@ -633,10 +643,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
             ctx.putImageData(toStandardImageData(resultImageData), 0, 0);
             timer.step('render_to_offscreen');
           }
+          console.log(`🎯 [WASM引擎] 完成处理: ${payload.action}`);
         } else {
           // OpenCV未准备好，返回原图
           console.warn(
-            `OpenCV未准备好，操作 ${payload.action} 暂不支持，返回原图`
+            `⚠️ [降级处理] OpenCV未准备好，操作 ${payload.action} 暂不支持，返回原图`
           );
           resultImageData = payload.imageData;
         }
@@ -644,13 +655,33 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
         timer.step('image_processed_in_worker');
         const perfLog = timer.end();
 
+        // 添加引擎信息到性能日志
+        const engineType = jsFilter
+          ? 'JavaScript'
+          : self.cv
+            ? 'WebAssembly (OpenCV.js)'
+            : 'Fallback';
+        const enhancedPerfLog = {
+          ...perfLog,
+          engine: engineType,
+          metadata: {
+            ...perfLog.metadata,
+            processingEngine: engineType,
+          },
+        };
+
+        // 在控制台输出详细的性能报告
+        console.log(
+          `📊 [性能报告] ${payload.action} | 引擎: ${engineType} | 耗时: ${perfLog.totalTime.toFixed(2)}ms`
+        );
+
         self.postMessage(
           {
             type: 'image-processed',
             payload: {
               imageData: resultImageData,
               isHistoryNavigation: payload.isHistoryNavigation || false,
-              perfLog: perfLog,
+              perfLog: enhancedPerfLog,
             },
           },
           [resultImageData.data.buffer]
