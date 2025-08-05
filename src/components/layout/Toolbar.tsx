@@ -9,10 +9,12 @@ import {
   FlipVertical,
   History,
   Palette,
+  PersonStanding,
   RotateCcw,
   RotateCw,
   SlidersHorizontal,
   Smile,
+  Sparkles,
   SquarePen,
   Sun,
   Type,
@@ -220,6 +222,18 @@ const Toolbar: React.FC = () => {
           icon={<History size={20} />}
           title="复古"
           onClick={() => handleDirectEffect('sepia')}
+          disabled={!currentImage || loading}
+        />
+        <ToolButton
+          icon={<Sparkles size={20} />}
+          title="图像增强"
+          onClick={() => handleDirectEffect('enhance')}
+          disabled={!currentImage || loading}
+        />
+        <ToolButton
+          icon={<PersonStanding size={20} />}
+          title="背景去除"
+          onClick={() => handleDirectEffect('removeBackground')}
           disabled={!currentImage || loading}
         />
       </div>

@@ -635,6 +635,85 @@ async function processWithWasm(
         break;
       }
 
+      case 'enhance': {
+        const gray = new self.cv.Mat();
+        self.cv.cvtColor(src, gray, self.cv.COLOR_RGBA2GRAY);
+        const clahe = new self.cv.CLAHE(2.0, new self.cv.Size(8, 8));
+        clahe.apply(gray, gray);
+        dst = new self.cv.Mat();
+        const srcChannels = new self.cv.MatVector();
+        self.cv.split(src, srcChannels);
+        const alpha = new self.cv.Mat();
+        srcChannels.get(3).copyTo(alpha);
+        self.cv.cvtColor(gray, dst, self.cv.COLOR_GRAY2RGBA);
+        const dstChannels = new self.cv.MatVector();
+        self.cv.split(dst, dstChannels);
+        const oldAlpha = dstChannels.get(3);
+        dstChannels.set(3, alpha);
+        self.cv.merge(dstChannels, dst);
+        gray.delete();
+        clahe.delete();
+        srcChannels.delete();
+        dstChannels.delete();
+        oldAlpha.delete();
+        alpha.delete();
+        break;
+      }
+
+      case 'removeBackground': {
+        let bgr = null;
+        let mask = null;
+        let bgdModel = null;
+        let fgdModel = null;
+
+        try {
+          bgr = new self.cv.Mat();
+          self.cv.cvtColor(src, bgr, self.cv.COLOR_RGBA2BGR);
+
+          // Initialize the mask with the correct size and type
+          mask = new self.cv.Mat(
+            src.rows,
+            src.cols,
+            self.cv.CV_8UC1,
+            new self.cv.Scalar(0)
+          );
+          bgdModel = new self.cv.Mat();
+          fgdModel = new self.cv.Mat();
+          const rect = new self.cv.Rect(5, 5, src.cols - 10, src.rows - 10);
+
+          self.cv.grabCut(
+            bgr,
+            mask,
+            rect,
+            bgdModel,
+            fgdModel,
+            5,
+            self.cv.GC_INIT_WITH_RECT
+          );
+
+          dst = src.clone();
+
+          for (let i = 0; i < dst.rows; i++) {
+            for (let j = 0; j < dst.cols; j++) {
+              const maskValue = mask.ucharPtr(i, j)[0];
+              if (
+                maskValue === self.cv.GC_BGD ||
+                maskValue === self.cv.GC_PR_BGD
+              ) {
+                dst.ucharPtr(i, j)[3] = 0; // Set alpha to 0 for background
+              }
+            }
+          }
+        } finally {
+          // Clean up resources safely
+          if (bgr && !bgr.isDeleted()) bgr.delete();
+          if (mask && !mask.isDeleted()) mask.delete();
+          if (bgdModel && !bgdModel.isDeleted()) bgdModel.delete();
+          if (fgdModel && !fgdModel.isDeleted()) fgdModel.delete();
+        }
+        break;
+      }
+
       case 'faceBeauty': {
         const {
           skinSmooth = 30,
@@ -893,12 +972,16 @@ async function processWithWasm(
     ) as ImageDataInterface;
 
     src.delete();
-    dst.delete();
+    if (dst && !dst.isDeleted()) {
+      dst.delete();
+    }
 
     return resultImageData;
   } catch (error) {
     src.delete();
-    if (dst) dst.delete();
+    if (dst && !dst.isDeleted()) {
+      dst.delete();
+    }
     throw error;
   }
 }
