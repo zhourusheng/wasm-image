@@ -12,6 +12,7 @@ import {
   RotateCcw,
   RotateCw,
   SlidersHorizontal,
+  Smile,
   SquarePen,
   Sun,
   Type,
@@ -248,6 +249,30 @@ const Toolbar: React.FC = () => {
               italic: false,
               scale: 0.3,
               imageData: null,
+            })
+          }
+          disabled={!currentImage || loading}
+        />
+      </div>
+
+      <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+      {/* AI美颜工具组 */}
+      <div className="flex flex-col items-center space-y-1 w-full">
+        <span className="font-medium text-gray-500 dark:text-gray-400">
+          AI美颜
+        </span>
+        <ToolButton
+          icon={<Smile size={20} />}
+          title="人脸美颜"
+          isActive={activeTool === 'faceBeauty'}
+          onClick={() =>
+            handleToolActivate('faceBeauty', {
+              skinSmooth: 30,
+              skinWhiten: 20,
+              faceSlim: 15,
+              eyeEnlarge: 10,
+              enabled: true,
             })
           }
           disabled={!currentImage || loading}

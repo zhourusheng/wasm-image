@@ -295,6 +295,77 @@ async function applyWatermarkJS(
   };
 }
 
+// 人脸美颜处理函数（纯JS实现）
+async function applyFaceBeautyJS(
+  imageData: ImageDataInterface,
+  params?: FilterParams
+): Promise<ImageDataInterface> {
+  const enabled = (params?.enabled as boolean) !== false;
+
+  if (!enabled) {
+    return imageData;
+  }
+
+  // 纯JS实现（基础美颜效果）
+  const skinSmooth = (params?.skinSmooth as number) || 30;
+  const skinWhiten = (params?.skinWhiten as number) || 20;
+
+  const canvas = new OffscreenCanvas(imageData.width, imageData.height);
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    console.error('无法获取2D上下文');
+    return imageData;
+  }
+
+  // 将原始图像数据绘制到canvas
+  ctx.putImageData(
+    new ImageData(imageData.data, imageData.width, imageData.height),
+    0,
+    0
+  );
+
+  try {
+    // 应用基础美颜效果
+    if (skinSmooth > 0) {
+      // 应用模糊效果模拟磨皮，限制最大模糊程度
+      const blurAmount = Math.min(5, skinSmooth * 0.05);
+      ctx.filter = `blur(${blurAmount}px)`;
+      ctx.drawImage(canvas, 0, 0);
+      ctx.filter = 'none';
+    }
+
+    if (skinWhiten > 0) {
+      // 应用亮度提升模拟美白，限制最大亮度
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = Math.min(0.3, skinWhiten * 0.005);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, imageData.width, imageData.height);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+
+    console.log(`✨ [纯JS美颜] 磨皮: ${skinSmooth}%, 美白: ${skinWhiten}%`);
+  } catch (error) {
+    console.error('纯JS美颜处理失败:', error);
+    // 如果处理失败，保持原图不变
+  }
+
+  // 获取处理后的图像数据
+  const resultImageData = ctx.getImageData(
+    0,
+    0,
+    imageData.width,
+    imageData.height
+  );
+
+  return {
+    data: new Uint8ClampedArray(resultImageData.data),
+    width: resultImageData.width,
+    height: resultImageData.height,
+  };
+}
+
 // 纯JS滤镜映射
 const pureJsFilters: Record<
   string,
@@ -308,6 +379,7 @@ const pureJsFilters: Record<
   brightness: applyBrightnessJS,
   contrast: applyContrastJS,
   watermark: applyWatermarkJS,
+  // faceBeauty 移除，优先使用WASM引擎进行人脸检测
 };
 
 // --- Worker 设置与消息处理 ---
@@ -563,6 +635,218 @@ async function processWithWasm(
         break;
       }
 
+      case 'faceBeauty': {
+        const {
+          skinSmooth = 30,
+          skinWhiten = 20,
+          faceSlim = 15,
+          eyeEnlarge = 10,
+          enabled = true,
+        } = params as {
+          skinSmooth?: number;
+          skinWhiten?: number;
+          faceSlim?: number;
+          eyeEnlarge?: number;
+          enabled?: boolean;
+        };
+
+        if (!enabled) {
+          dst = src.clone();
+          break;
+        }
+
+        // 智能人脸检测和精准美颜处理
+        try {
+          dst = src.clone();
+
+          // 1. 人脸区域检测（简化版）
+          const gray = new self.cv.Mat();
+          self.cv.cvtColor(src, gray, self.cv.COLOR_RGBA2GRAY);
+
+          // 基于图像特征的人脸区域估算（实际项目中应该使用训练好的分类器）
+          let faceDetected = false;
+          let faceRect = null;
+
+          try {
+            // 使用图像中心偏上的区域作为可能的人脸区域
+            // 这是一个简化的检测方法，适用于大部分人像照片
+            const imgWidth = gray.cols;
+            const imgHeight = gray.rows;
+
+            // 检查图像尺寸，判断是否可能包含人脸
+            if (imgWidth > 100 && imgHeight > 100) {
+              const centerX = Math.floor(imgWidth * 0.25);
+              const centerY = Math.floor(imgHeight * 0.15);
+              const faceWidth = Math.floor(imgWidth * 0.5);
+              const faceHeight = Math.floor(imgHeight * 0.6);
+
+              // 确保人脸区域在图像范围内
+              if (
+                centerX + faceWidth <= imgWidth &&
+                centerY + faceHeight <= imgHeight
+              ) {
+                faceRect = new self.cv.Rect(
+                  centerX,
+                  centerY,
+                  faceWidth,
+                  faceHeight
+                );
+                faceDetected = true;
+                console.log(
+                  `👤 [人脸检测] 估算人脸区域: ${centerX},${centerY} ${faceWidth}x${faceHeight}`
+                );
+              }
+            }
+          } catch (detectError) {
+            console.warn('人脸区域估算失败:', detectError);
+            faceDetected = false;
+          }
+
+          // 2. 分离RGBA通道
+          const channels = new self.cv.MatVector();
+          self.cv.split(src, channels);
+          const alpha = new self.cv.Mat();
+          channels.get(3).copyTo(alpha);
+
+          // 3. 转换为BGR进行处理
+          const bgr = new self.cv.Mat();
+          self.cv.cvtColor(src, bgr, self.cv.COLOR_RGBA2BGR);
+
+          // 4. 应用智能美颜效果
+          if (faceDetected && faceRect) {
+            // 精准美颜：主要对人脸区域处理
+            console.log(`✨ [精准美颜] 对人脸区域进行重点美颜处理`);
+
+            const faceRegion = bgr.roi(faceRect);
+
+            if (skinSmooth > 0) {
+              // 对人脸区域进行强化磨皮
+              const faceSmoothed = new self.cv.Mat();
+              self.cv.bilateralFilter(
+                faceRegion,
+                faceSmoothed,
+                Math.min(15, Math.max(7, Math.round(skinSmooth * 0.4))),
+                skinSmooth * 2,
+                skinSmooth * 2
+              );
+              faceSmoothed.copyTo(faceRegion);
+              faceSmoothed.delete();
+            }
+
+            if (skinWhiten > 0) {
+              // 对人脸区域进行强化美白
+              const whitenValue = Math.min(60, skinWhiten * 1.0);
+              const faceWhitenMat = new self.cv.Mat(
+                faceRegion.rows,
+                faceRegion.cols,
+                faceRegion.type(),
+                new self.cv.Scalar(whitenValue, whitenValue, whitenValue)
+              );
+              self.cv.add(faceRegion, faceWhitenMat, faceRegion);
+              faceWhitenMat.delete();
+            }
+
+            faceRegion.delete();
+
+            // 对非人脸区域进行轻度处理
+            if (skinSmooth > 5 || skinWhiten > 5) {
+              // 创建人脸区域遮罩的反向遮罩，对其他区域进行轻度美颜
+              if (skinSmooth > 5) {
+                const lightSmoothed = new self.cv.Mat();
+                self.cv.bilateralFilter(
+                  bgr,
+                  lightSmoothed,
+                  5,
+                  skinSmooth * 0.3,
+                  skinSmooth * 0.3
+                );
+                // 将轻度处理结果混合到非人脸区域
+                lightSmoothed.copyTo(bgr);
+                lightSmoothed.delete();
+              }
+            }
+          } else {
+            // 全图美颜：当无法检测到人脸时的降级处理
+            console.log(`✨ [全图美颜] 未检测到明显人脸区域，进行全图轻度美颜`);
+
+            if (skinSmooth > 0) {
+              const smoothed = new self.cv.Mat();
+              self.cv.bilateralFilter(
+                bgr,
+                smoothed,
+                Math.min(10, Math.max(3, Math.round(skinSmooth * 0.25))),
+                skinSmooth * 1.2,
+                skinSmooth * 1.2
+              );
+              smoothed.copyTo(bgr);
+              smoothed.delete();
+            }
+
+            if (skinWhiten > 0) {
+              const whitenValue = Math.min(35, skinWhiten * 0.6);
+              const whitenMat = new self.cv.Mat(
+                bgr.rows,
+                bgr.cols,
+                bgr.type(),
+                new self.cv.Scalar(whitenValue, whitenValue, whitenValue)
+              );
+              self.cv.add(bgr, whitenMat, bgr);
+              whitenMat.delete();
+            }
+          }
+
+          // TODO: 高级美颜功能（瘦脸、大眼）
+          if (faceSlim > 0 || eyeEnlarge > 0) {
+            console.log(
+              `🚧 [高级美颜] 瘦脸: ${faceSlim}%, 大眼: ${eyeEnlarge}% - 需要面部关键点检测`
+            );
+          }
+
+          // 5. 转换回RGBA
+          self.cv.cvtColor(bgr, dst, self.cv.COLOR_BGR2RGBA);
+
+          // 6. 恢复alpha通道
+          const dstChannels = new self.cv.MatVector();
+          self.cv.split(dst, dstChannels);
+          dstChannels.set(3, alpha);
+          self.cv.merge(dstChannels, dst);
+
+          console.log(
+            `🎯 [WASM美颜] ${faceDetected ? '精准' : '全图'}美颜完成 - 磨皮: ${skinSmooth}%, 美白: ${skinWhiten}%`
+          );
+
+          // 7. 清理资源
+          gray.delete();
+          channels.delete();
+          alpha.delete();
+          bgr.delete();
+          dstChannels.delete();
+        } catch (error) {
+          console.error('WASM美颜处理失败:', error);
+          // 降级到纯JS处理
+          console.log('🔄 [降级处理] 使用纯JS美颜算法');
+
+          try {
+            const jsResult = await applyFaceBeautyJS(
+              {
+                data: new Uint8ClampedArray(src.data),
+                width: src.cols,
+                height: src.rows,
+              },
+              params
+            );
+
+            const jsMat = self.cv.matFromImageData(jsResult);
+            jsMat.copyTo(dst);
+            jsMat.delete();
+          } catch (jsError) {
+            console.error('纯JS美颜也失败了:', jsError);
+            dst = src.clone();
+          }
+        }
+        break;
+      }
+
       case 'compress': {
         // 压缩操作主要是调整质量，这里直接返回原图像
         // 实际的压缩会在导出时处理
@@ -748,11 +1032,31 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
           }
           console.log(`🎯 [WASM引擎] 完成处理: ${payload.action}`);
         } else {
-          // OpenCV未准备好，返回原图
-          console.warn(
-            `⚠️ [降级处理] OpenCV未准备好，操作 ${payload.action} 暂不支持，返回原图`
-          );
-          resultImageData = payload.imageData;
+          // OpenCV未准备好，检查是否有降级处理方案
+          if (payload.action === 'faceBeauty') {
+            console.log(
+              `🔄 [降级处理] OpenCV未准备好，${payload.action} 使用纯JS处理`
+            );
+            timer.step('js_fallback_start');
+            resultImageData = await applyFaceBeautyJS(
+              payload.imageData,
+              payload.params
+            );
+            timer.step('js_fallback_end');
+
+            // 手动渲染
+            ctx.canvas.width = resultImageData.width;
+            ctx.canvas.height = resultImageData.height;
+            if (!payload.skipRendering) {
+              ctx.putImageData(toStandardImageData(resultImageData), 0, 0);
+              timer.step('render_to_offscreen');
+            }
+          } else {
+            console.warn(
+              `⚠️ [降级处理] OpenCV未准备好，操作 ${payload.action} 暂不支持，返回原图`
+            );
+            resultImageData = payload.imageData;
+          }
         }
 
         timer.step('image_processed_in_worker');

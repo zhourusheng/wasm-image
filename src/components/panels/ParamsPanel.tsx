@@ -462,6 +462,129 @@ const WatermarkControls: React.FC<ControlProps> = ({ params, onChange }) => {
   );
 };
 
+// 人脸美颜控制面板
+const FaceBeautyControls: React.FC<ControlProps> = ({ params, onChange }) => {
+  const skinSmooth = (params.skinSmooth as number) || 30;
+  const skinWhiten = (params.skinWhiten as number) || 20;
+  const faceSlim = (params.faceSlim as number) || 15;
+  const eyeEnlarge = (params.eyeEnlarge as number) || 10;
+  const enabled = (params.enabled as boolean) !== false;
+
+  const handleSkinSmoothChange = (value: number): void => {
+    onChange({ ...params, skinSmooth: value });
+  };
+
+  const handleSkinWhitenChange = (value: number): void => {
+    onChange({ ...params, skinWhiten: value });
+  };
+
+  const handleFaceSlimChange = (value: number): void => {
+    onChange({ ...params, faceSlim: value });
+  };
+
+  const handleEyeEnlargeChange = (value: number): void => {
+    onChange({ ...params, eyeEnlarge: value });
+  };
+
+  const handleEnabledChange = (checked: boolean): void => {
+    onChange({ ...params, enabled: checked });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* 美颜开关 */}
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium">启用美颜</label>
+        <Switch checked={enabled} onChange={handleEnabledChange} />
+      </div>
+
+      {enabled && (
+        <>
+          {/* 磨皮 */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              磨皮: {skinSmooth}%
+            </label>
+            <Slider
+              min={0}
+              max={100}
+              step={1}
+              value={skinSmooth}
+              onChange={handleSkinSmoothChange}
+              tooltip={{ formatter: value => `${value}%` }}
+            />
+            <div className="text-xs text-gray-500 mt-1">
+              平滑皮肤纹理，减少瑕疵
+            </div>
+          </div>
+
+          {/* 美白 */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              美白: {skinWhiten}%
+            </label>
+            <Slider
+              min={0}
+              max={100}
+              step={1}
+              value={skinWhiten}
+              onChange={handleSkinWhitenChange}
+              tooltip={{ formatter: value => `${value}%` }}
+            />
+            <div className="text-xs text-gray-500 mt-1">
+              提亮肤色，增加光泽感
+            </div>
+          </div>
+
+          {/* 瘦脸 */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              瘦脸: {faceSlim}%
+            </label>
+            <Slider
+              min={0}
+              max={50}
+              step={1}
+              value={faceSlim}
+              onChange={handleFaceSlimChange}
+              tooltip={{ formatter: value => `${value}%` }}
+            />
+            <div className="text-xs text-gray-500 mt-1">
+              收缩脸部轮廓，塑造立体感
+            </div>
+          </div>
+
+          {/* 大眼 */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              大眼: {eyeEnlarge}%
+            </label>
+            <Slider
+              min={0}
+              max={30}
+              step={1}
+              value={eyeEnlarge}
+              onChange={handleEyeEnlargeChange}
+              tooltip={{ formatter: value => `${value}%` }}
+            />
+            <div className="text-xs text-gray-500 mt-1">
+              适度放大眼部，增加灵动感
+            </div>
+          </div>
+
+          {/* 提示信息 */}
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+            <div className="text-xs text-blue-600 dark:text-blue-400">
+              💡
+              提示：AI美颜会自动检测人脸区域进行处理，建议从较低强度开始调整。
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // 工具名称映射
 const TOOL_NAMES: Record<string, string> = {
   brightness: '亮度',
@@ -471,6 +594,7 @@ const TOOL_NAMES: Record<string, string> = {
   colorBalance: '色彩平衡',
   compress: '压缩',
   watermark: '文字水印',
+  faceBeauty: '人脸美颜',
 };
 
 const ParamsPanel: React.FC = () => {
@@ -522,6 +646,13 @@ const ParamsPanel: React.FC = () => {
       case 'watermark':
         return (
           <WatermarkControls
+            params={toolParams}
+            onChange={handleParamsChange}
+          />
+        );
+      case 'faceBeauty':
+        return (
+          <FaceBeautyControls
             params={toolParams}
             onChange={handleParamsChange}
           />

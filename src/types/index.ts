@@ -91,7 +91,8 @@ export type ImageOperation =
   | 'crop'
   | 'rotate'
   | 'flip'
-  | 'watermark';
+  | 'watermark'
+  | 'faceBeauty';
 
 // 导出格式类型
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
@@ -141,6 +142,7 @@ export type ToolType =
   | 'colorBalance'
   | 'compress'
   | 'watermark'
+  | 'faceBeauty'
   | null;
 
 // 裁剪区域接口
@@ -149,6 +151,36 @@ export interface CropArea {
   y: number;
   width: number;
   height: number;
+}
+
+// 人脸检测结果接口
+export interface FaceDetection {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  landmarks?: FaceLandmarks;
+  confidence: number;
+}
+
+// 人脸关键点接口
+export interface FaceLandmarks {
+  leftEye: { x: number; y: number };
+  rightEye: { x: number; y: number };
+  nose: { x: number; y: number };
+  mouth: { x: number; y: number };
+  leftCheek: { x: number; y: number };
+  rightCheek: { x: number; y: number };
+  chin: { x: number; y: number };
+}
+
+// 美颜参数接口
+export interface BeautyParams {
+  skinSmooth: number; // 磨皮强度 0-100
+  skinWhiten: number; // 美白强度 0-100
+  faceSlim: number; // 瘦脸强度 0-100
+  eyeEnlarge: number; // 大眼强度 0-100
+  enabled: boolean; // 是否启用美颜
 }
 
 // 拼贴项接口
