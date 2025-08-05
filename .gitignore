@@ -48,6 +48,11 @@ pids
 coverage/
 *.lcov
 
+# Test related files
+.vitest/
+test-results/
+playwright-report/
+
 # ESLint cache
 .eslintcache
 

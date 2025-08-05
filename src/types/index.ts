@@ -58,7 +58,7 @@ export function toStandardImageData(imgData: ImageDataInterface): ImageData {
 
 // 滤镜参数接口
 export interface FilterParams {
-  [key: string]: number | string | boolean;
+  [key: string]: number | string | boolean | null | ImageDataInterface;
 }
 
 // 性能监控接口

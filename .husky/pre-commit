@@ -1,4 +1,11 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+echo "🔍 Running pre-commit checks..."
 
-npx lint-staged 
+# 运行类型检查
+echo "📝 Type checking..."
+pnpm type-check
+
+# 运行 lint-staged（包含测试）
+echo "🧹 Linting and testing changed files..."
+npx lint-staged
+
+echo "✅ Pre-commit checks completed successfully!" 

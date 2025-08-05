@@ -24,7 +24,9 @@ interface ControlProps {
 // 亮度控制面板
 const BrightnessControls: React.FC<ControlProps> = ({ params, onChange }) => (
   <div className="space-y-2">
-    <label className="text-sm font-medium">亮度: {params.delta || 0}</label>
+    <label className="text-sm font-medium">
+      亮度: {String(params.delta || 0)}
+    </label>
     <Slider
       min={-100}
       max={100}
@@ -70,7 +72,9 @@ const SaturationControls: React.FC<ControlProps> = ({ params, onChange }) => (
 // 模糊控制面板
 const BlurControls: React.FC<ControlProps> = ({ params, onChange }) => (
   <div className="space-y-2">
-    <label className="text-sm font-medium">模糊程度: {params.ksize || 5}</label>
+    <label className="text-sm font-medium">
+      模糊程度: {String(params.ksize || 5)}
+    </label>
     <Slider
       min={1}
       max={21}

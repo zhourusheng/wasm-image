@@ -209,7 +209,11 @@ async function applyWatermarkJS(
 
   // 将原始图像数据绘制到canvas
   ctx.putImageData(
-    new ImageData(imageData.data, imageData.width, imageData.height),
+    new ImageData(
+      new Uint8ClampedArray(imageData.data),
+      imageData.width,
+      imageData.height
+    ),
     0,
     0
   );
@@ -320,7 +324,11 @@ async function applyFaceBeautyJS(
 
   // 将原始图像数据绘制到canvas
   ctx.putImageData(
-    new ImageData(imageData.data, imageData.width, imageData.height),
+    new ImageData(
+      new Uint8ClampedArray(imageData.data),
+      imageData.width,
+      imageData.height
+    ),
     0,
     0
   );
