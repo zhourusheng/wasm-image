@@ -712,59 +712,83 @@ async function processWithWasm(
           const bgr = new self.cv.Mat();
           self.cv.cvtColor(src, bgr, self.cv.COLOR_RGBA2BGR);
 
-          // 4. 应用智能美颜效果
+          // 4. 应用羽化蒙版技术进行无缝美颜
           if (faceDetected && faceRect) {
-            // 精准美颜：主要对人脸区域处理
-            console.log(`✨ [精准美颜] 对人脸区域进行重点美颜处理`);
+            // --- 最终优化：约束羽化参数，修复性能问题，实现无缝美颜 ---
+            console.log(`✨ [精准美颜] 启动羽化蒙版融合引擎 V2，实现无缝处理`);
 
-            const faceRegion = bgr.roi(faceRect);
+            // 4a. 创建一个完整处理过的图像副本
+            const bgrProcessed = bgr.clone();
 
             if (skinSmooth > 0) {
-              // 对人脸区域进行强化磨皮
-              const faceSmoothed = new self.cv.Mat();
-              self.cv.bilateralFilter(
-                faceRegion,
-                faceSmoothed,
-                Math.min(15, Math.max(7, Math.round(skinSmooth * 0.4))),
-                skinSmooth * 2,
-                skinSmooth * 2
-              );
-              faceSmoothed.copyTo(faceRegion);
-              faceSmoothed.delete();
+              const d = Math.min(11, Math.max(5, Math.round(skinSmooth * 0.2)));
+              const sigma = Math.min(200, skinSmooth * 1.5);
+              console.log(`💡 [磨皮参数] d: ${d}, sigma: ${sigma.toFixed(1)}`);
+              self.cv.bilateralFilter(bgr, bgrProcessed, d, sigma, sigma);
             }
-
             if (skinWhiten > 0) {
-              // 对人脸区域进行强化美白
-              const whitenValue = Math.min(60, skinWhiten * 1.0);
-              const faceWhitenMat = new self.cv.Mat(
-                faceRegion.rows,
-                faceRegion.cols,
-                faceRegion.type(),
-                new self.cv.Scalar(whitenValue, whitenValue, whitenValue)
+              const whitenValue = Math.min(25, skinWhiten * 0.5);
+              const alpha = 1.0 + whitenValue * 0.015;
+              const beta = whitenValue * 0.8;
+              console.log(
+                `💡 [美白参数] alpha: ${alpha.toFixed(3)}, beta: ${beta.toFixed(1)}`
               );
-              self.cv.add(faceRegion, faceWhitenMat, faceRegion);
-              faceWhitenMat.delete();
+              // 在副本上进行美白 (修复内存泄漏，移除多余的clone)
+              self.cv.convertScaleAbs(bgrProcessed, bgrProcessed, alpha, beta);
             }
 
-            faceRegion.delete();
+            // 4b. 创建一个黑色的蒙版
+            const mask = new self.cv.Mat(
+              bgr.rows,
+              bgr.cols,
+              self.cv.CV_8UC1,
+              new self.cv.Scalar(0)
+            );
 
-            // 对非人脸区域进行轻度处理
-            if (skinSmooth > 5 || skinWhiten > 5) {
-              // 创建人脸区域遮罩的反向遮罩，对其他区域进行轻度美颜
-              if (skinSmooth > 5) {
-                const lightSmoothed = new self.cv.Mat();
-                self.cv.bilateralFilter(
-                  bgr,
-                  lightSmoothed,
-                  5,
-                  skinSmooth * 0.3,
-                  skinSmooth * 0.3
-                );
-                // 将轻度处理结果混合到非人脸区域
-                lightSmoothed.copyTo(bgr);
-                lightSmoothed.delete();
-              }
-            }
+            // 4c. 在蒙版上绘制一个白色填充椭圆
+            const center = new self.cv.Point(
+              faceRect.x + faceRect.width / 2,
+              faceRect.y + faceRect.height / 2
+            );
+            const axes = new self.cv.Size(
+              faceRect.width * 0.5,
+              faceRect.height * 0.55
+            );
+            self.cv.ellipse(
+              mask,
+              center,
+              axes,
+              0,
+              0,
+              360,
+              new self.cv.Scalar(255),
+              -1
+            );
+
+            // 4d. 对蒙版进行高斯模糊以创建羽化效果（核心修复）
+            const blurRadius = Math.round(faceRect.width * 0.25);
+            let ksize = Math.min(151, blurRadius); // 限制最大内核尺寸，防止性能雪崩
+            if (ksize % 2 === 0) ksize++;
+            console.log(
+              `💡 [羽化参数] blurRadius: ${blurRadius}, ksize: ${ksize}`
+            );
+            self.cv.GaussianBlur(
+              mask,
+              mask,
+              new self.cv.Size(ksize, ksize),
+              0,
+              0,
+              self.cv.BORDER_DEFAULT
+            );
+
+            // 4e. 使用羽化蒙版将处理过的图像融合回原图
+            bgrProcessed.copyTo(bgr, mask);
+
+            // 4f. 清理资源
+            bgrProcessed.delete();
+            mask.delete();
+
+            console.log(`✅ [羽化融合] 美颜效果已无缝应用`);
           } else {
             // 全图美颜：当无法检测到人脸时的降级处理
             console.log(`✨ [全图美颜] 未检测到明显人脸区域，进行全图轻度美颜`);
@@ -783,15 +807,18 @@ async function processWithWasm(
             }
 
             if (skinWhiten > 0) {
-              const whitenValue = Math.min(35, skinWhiten * 0.6);
-              const whitenMat = new self.cv.Mat(
-                bgr.rows,
-                bgr.cols,
-                bgr.type(),
-                new self.cv.Scalar(whitenValue, whitenValue, whitenValue)
+              // ✅ [修复完成] 使用convertScaleAbs进行自然全图美白
+              const whitenValue = Math.min(15, skinWhiten * 0.3); // 适中的全图美白强度
+
+              // 使用convertScaleAbs进行自然的亮度调整
+              const alpha = 1.0 + whitenValue * 0.008; // 亮度系数：1.0-1.12
+              const beta = whitenValue * 0.5; // 偏移量：0-7.5
+
+              self.cv.convertScaleAbs(bgr, bgr, alpha, beta);
+
+              console.log(
+                `✨ [全图美白] 亮度系数: ${alpha.toFixed(3)}, 偏移量: ${beta.toFixed(1)}`
               );
-              self.cv.add(bgr, whitenMat, bgr);
-              whitenMat.delete();
             }
           }
 
@@ -812,7 +839,7 @@ async function processWithWasm(
           self.cv.merge(dstChannels, dst);
 
           console.log(
-            `🎯 [WASM美颜] ${faceDetected ? '精准' : '全图'}美颜完成 - 磨皮: ${skinSmooth}%, 美白: ${skinWhiten}%`
+            `🎯 [WASM美颜] ${faceDetected ? '羽化蒙版精准' : '全图'}美颜完成 - 磨皮: ${skinSmooth}%, 美白: ${skinWhiten}%`
           );
 
           // 7. 清理资源
