@@ -1,13 +1,13 @@
 import { useCallback } from 'react';
-import type {
-  ImageDataInterface,
-  WorkerMessage,
-  FilterParams,
-  PerformanceMetrics,
-} from '../types';
-import useImageStore from '../store/imageStore';
 import useEditorStore from '../store/editorStore';
+import useImageStore from '../store/imageStore';
 import useUiStore from '../store/uiStore';
+import type {
+  FilterParams,
+  ImageDataInterface,
+  PerformanceMetrics,
+  WorkerMessage,
+} from '../types';
 import notificationService from '../utils/notificationService';
 import { logPerformanceToConsole } from '../utils/performanceLogger';
 
@@ -95,22 +95,13 @@ export const useImageProcessing = () => {
       setCanvasRendered(false);
       updateDeviceInfo({ touchSupport: 'ontouchstart' in window });
 
-      // 清空历史记录并添加新图像
+      // 清空历史记录并设置新图像
       clearHistory();
+      setImage(imageData); // 设置图像到状态中，Canvas组件的useEffect会自动处理渲染
 
-      // 将图像发送给worker处理
-      if (imageWorker) {
-        const message: WorkerMessage = {
-          type: 'image-process',
-          payload: {
-            imageData,
-            action: 'original',
-          },
-        };
-        imageWorker.postMessage(message);
-      }
+      // 注意：不需要手动发送Worker消息，Canvas组件的useEffect会监听currentImage变化并处理
     },
-    [imageWorker, setLoading, setCanvasRendered, clearHistory, updateDeviceInfo]
+    [setLoading, setCanvasRendered, clearHistory, updateDeviceInfo, setImage]
   );
 
   // 处理压缩预览结果
@@ -141,20 +132,29 @@ export const useImageProcessing = () => {
       }
 
       if (payload.imageData) {
-        // 仅当不是历史导航/预览时才添加到历史记录
-        if (!payload.isHistoryNavigation) {
-          updateImage(payload.imageData);
+        if (payload.perfLog?.operation === 'original') {
+          // 对于original操作，确保图像状态正确设置
+          // 如果是首次加载或历史导航，需要设置图像状态
+          if (!currentImage || payload.isHistoryNavigation) {
+            setImage(payload.imageData);
+          }
+          setCanvasRendered(true);
         } else {
-          // 预览时直接设置图像，不添加历史记录
-          setImage(payload.imageData);
+          // 对于其他操作，正常更新图像数据
+          if (!payload.isHistoryNavigation) {
+            updateImage(payload.imageData);
+          } else {
+            // 预览时直接设置图像，不添加历史记录
+            setImage(payload.imageData);
+          }
+          setCanvasRendered(true);
         }
-        setCanvasRendered(true);
       }
 
       setLoading(false);
       return payload;
     },
-    [setLoading, updateImage, setImage, setCanvasRendered]
+    [setLoading, updateImage, setImage, setCanvasRendered, currentImage]
   );
 
   // 处理Worker错误

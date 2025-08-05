@@ -30,13 +30,25 @@ export function toStandardImageData(imgData: ImageDataInterface): ImageData {
   if (isStandardImageData(imgData)) {
     return imgData;
   }
+
+  // 检查SharedArrayBuffer是否可用
+  const isSharedArrayBufferAvailable = typeof SharedArrayBuffer !== 'undefined';
+
   // 确保 data 是 ArrayBuffer 而不是 SharedArrayBuffer
   const buffer = imgData.data.buffer;
-  const uint8Array = new Uint8ClampedArray(
-    buffer instanceof SharedArrayBuffer ? buffer.slice(0) : buffer,
-    imgData.data.byteOffset,
-    imgData.data.length
-  );
+  let uint8Array: Uint8ClampedArray;
+
+  if (isSharedArrayBufferAvailable && buffer instanceof SharedArrayBuffer) {
+    // 如果SharedArrayBuffer可用且buffer是SharedArrayBuffer，则复制数据
+    uint8Array = new Uint8ClampedArray(buffer.slice(0));
+  } else {
+    // 否则直接使用原始buffer
+    uint8Array = new Uint8ClampedArray(
+      buffer,
+      imgData.data.byteOffset,
+      imgData.data.length
+    );
+  }
 
   // 使用类型断言来避免 TypeScript 的严格类型检查
   return new (ImageData as any)(uint8Array, imgData.width, imgData.height, {

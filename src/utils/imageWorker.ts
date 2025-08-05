@@ -1,6 +1,45 @@
 // imageWorker.ts
-import type { ImageDataInterface, FilterParams } from '../types';
-import { toStandardImageData } from '../types';
+// 在Worker中直接定义类型和函数，避免import语句
+
+// 图像数据接口 - 兼容标准ImageData
+interface ImageDataInterface {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+  colorSpace?: PredefinedColorSpace;
+}
+
+// 滤镜参数接口
+interface FilterParams {
+  [key: string]: number | string | boolean;
+}
+
+// 转换为标准ImageData的辅助函数
+function toStandardImageData(imgData: ImageDataInterface): ImageData {
+  // 检查SharedArrayBuffer是否可用
+  const isSharedArrayBufferAvailable = typeof SharedArrayBuffer !== 'undefined';
+
+  // 确保 data 是 ArrayBuffer 而不是 SharedArrayBuffer
+  const buffer = imgData.data.buffer;
+  let uint8Array: Uint8ClampedArray;
+
+  if (isSharedArrayBufferAvailable && buffer instanceof SharedArrayBuffer) {
+    // 如果SharedArrayBuffer可用且buffer是SharedArrayBuffer，则复制数据
+    uint8Array = new Uint8ClampedArray(buffer.slice(0));
+  } else {
+    // 否则直接使用原始buffer
+    uint8Array = new Uint8ClampedArray(
+      buffer,
+      imgData.data.byteOffset,
+      imgData.data.length
+    );
+  }
+
+  // 使用类型断言来避免 TypeScript 的严格类型检查
+  return new (ImageData as any)(uint8Array, imgData.width, imgData.height, {
+    colorSpace: imgData.colorSpace,
+  });
+}
 
 // Worker消息接口
 interface WorkerMessageEvent {
@@ -14,13 +53,6 @@ interface WorkerMessageEvent {
     skipRendering?: boolean;
   };
 }
-
-// 声明Worker全局作用域
-declare const self: DedicatedWorkerGlobalScope & {
-  cv?: any;
-  Module?: any;
-  importScripts: (url: string) => void;
-};
 
 /**
  * 一个简单的性能计时器，用于记录多步骤操作的耗时。
@@ -176,34 +208,11 @@ const pureJsFilters: Record<
 
 // --- Worker 设置与消息处理 ---
 
-// 使用动态导入解决开发环境中的模块导入问题
-let wasmProcessImage:
-  | ((
-      imageData: ImageDataInterface,
-      op: string,
-      params: FilterParams,
-      ctx: OffscreenCanvasRenderingContext2D,
-      timer: PerformanceTimer,
-      skipRendering?: boolean
-    ) => Promise<ImageDataInterface>)
-  | null = null;
-
-// 异步加载wasmBridge模块
-const loadWasmBridge = async () => {
-  if (!wasmProcessImage) {
-    try {
-      const wasmBridge = await import('./wasmBridge.js');
-      wasmProcessImage = wasmBridge.wasmProcessImage;
-    } catch (error) {
-      console.error('Failed to load wasmBridge:', error);
-      throw error;
-    }
-  }
-  return wasmProcessImage;
-};
+// 暂时禁用wasmBridge，只使用JS滤镜
+// 后续可以通过其他方式加载wasmBridge
 
 // 初始化Module
-self.Module = {
+(self as any).Module = {
   noInitialRun: true,
   onRuntimeInitialized: () => {
     self.postMessage({ type: 'opencv-loaded' });
@@ -226,7 +235,7 @@ let ctx: OffscreenCanvasRenderingContext2D | null = null;
       );
     }
     const buffer = await response.arrayBuffer();
-    self.Module.wasmBinary = buffer;
+    (self as any).Module.wasmBinary = buffer;
     self.importScripts(
       'https://wasm-worker.oss-cn-nanjing.aliyuncs.com/opencv.js'
     );
@@ -250,7 +259,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
       }
       break;
 
-    case 'image-process':
+    case 'image-process': {
       if (!payload.imageData || !payload.action) {
         self.postMessage({
           type: 'error',
@@ -260,6 +269,42 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
       }
 
       const jsFilter = pureJsFilters[payload.action];
+
+      // 处理original操作（直接返回原图）
+      if (payload.action === 'original') {
+        const timer = new PerformanceTimer('original', {
+          width: payload.imageData.width,
+          height: payload.imageData.height,
+        });
+
+        timer.step('original_start');
+        const resultImageData = payload.imageData;
+        timer.step('original_end');
+
+        // 渲染到canvas
+        if (ctx) {
+          ctx.canvas.width = resultImageData.width;
+          ctx.canvas.height = resultImageData.height;
+          ctx.putImageData(toStandardImageData(resultImageData), 0, 0);
+          timer.step('render_to_offscreen');
+        }
+
+        timer.step('image_processed_in_worker');
+        const perfLog = timer.end();
+
+        self.postMessage(
+          {
+            type: 'image-processed',
+            payload: {
+              imageData: resultImageData,
+              isHistoryNavigation: payload.isHistoryNavigation || false,
+              perfLog: perfLog,
+            },
+          },
+          [resultImageData.data.buffer]
+        );
+        return;
+      }
 
       if (!self.cv && !jsFilter) {
         console.error('OpenCV 尚未准备好。');
@@ -300,21 +345,9 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
             timer.step('render_to_offscreen');
           }
         } else {
-          // 对于所有其他操作，使用 WebAssembly
-          // 确保wasmBridge已加载
-          const wasmProcessor = await loadWasmBridge();
-          if (!wasmProcessor) {
-            throw new Error('WASM处理器加载失败');
-          }
-
-          resultImageData = await wasmProcessor(
-            payload.imageData,
-            payload.action,
-            payload.params || {},
-            ctx,
-            timer,
-            payload.skipRendering // 传递skipRendering参数给wasmProcessImage
-          );
+          // 暂时只支持JS滤镜，其他操作返回原图
+          console.warn(`操作 ${payload.action} 暂不支持，返回原图`);
+          resultImageData = payload.imageData;
         }
 
         timer.step('image_processed_in_worker');
@@ -338,6 +371,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
         self.postMessage({ type: 'error', payload: errorMessage });
       }
       break;
+    }
 
     default:
       console.warn(`未知的Worker消息类型: ${type}`);

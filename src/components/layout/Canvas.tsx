@@ -1,14 +1,15 @@
-import React, { useEffect, RefObject } from 'react';
-import { Check, X, Undo, Redo, Trash2 } from 'lucide-react';
 import { Button, Tooltip } from 'antd';
-import useImageStore from '../../store/imageStore';
-import useEditorStore from '../../store/editorStore';
+import { Check, Redo, Trash2, Undo, X } from 'lucide-react';
+import React, { RefObject, useEffect, useRef } from 'react';
 import useCanvas from '../../hooks/useCanvas';
+import useImageProcessing from '../../hooks/useImageProcessing';
+import useEditorStore from '../../store/editorStore';
+import useImageStore from '../../store/imageStore';
 import useUiStore from '../../store/uiStore';
 import { toStandardImageData } from '../../types';
-import useImageProcessing from '../../hooks/useImageProcessing';
-import LoadingOverlay from '../common/LoadingOverlay';
+
 import notificationService from '../../utils/notificationService';
+import LoadingOverlay from '../common/LoadingOverlay';
 
 // 空状态提示组件
 const EmptyStatePrompt: React.FC = () => {
@@ -114,6 +115,34 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
       );
     }
   }, [canvasRef, imageWorker, opencvLoaded]);
+
+  // 当currentImage变化时，通过Worker处理图像显示
+  // 使用ref来避免无限循环
+  const lastProcessedImageRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (currentImage && workerReady && imageWorker) {
+      // 生成图像的唯一标识，避免重复处理
+      const imageId = `${currentImage.width}x${currentImage.height}-${currentImage.data.length}`;
+
+      // 如果这个图像已经处理过，就不再重复处理
+      if (lastProcessedImageRef.current === imageId) {
+        return;
+      }
+
+      lastProcessedImageRef.current = imageId;
+
+      // 通过Worker处理图像显示，而不是直接在主线程绘制
+      imageWorker.postMessage({
+        type: 'image-process',
+        payload: {
+          imageData: currentImage,
+          action: 'original',
+          isHistoryNavigation: false,
+        },
+      });
+    }
+  }, [currentImage, workerReady, imageWorker]);
 
   // 历史记录操作
   const handleUndo = (): void => {

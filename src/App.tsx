@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, Suspense, lazy } from 'react';
-import Header from './components/layout/Header';
-import Footer from './components/layout/Footer';
-import Toolbar from './components/layout/Toolbar';
+import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import Canvas from './components/layout/Canvas';
+import Footer from './components/layout/Footer';
+import Header from './components/layout/Header';
+import Toolbar from './components/layout/Toolbar';
 import useImageProcessing from './hooks/useImageProcessing';
 import useEditorStore from './store/editorStore';
 
@@ -17,9 +17,9 @@ const App: React.FC = () => {
   const { setImageWorker, activeTool, isCollageMode } = useEditorStore();
 
   useEffect(() => {
-    // 告诉 Vite 将 worker 文件作为模块内联处理
+    // 创建Worker实例
     const worker = new Worker(
-      new URL('./utils/imageWorker.js?worker&inline', import.meta.url)
+      new URL('./utils/imageWorker.ts?worker', import.meta.url)
     );
     setImageWorker(worker);
 

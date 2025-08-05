@@ -2,6 +2,8 @@
 alwaysApply: true
 ---
 
+Always respond in Chinese.
+
 添加新功能不要添加其他不相关代码或修改不想干的文件，特别是不要修改 webworker 和 webassembly opencv.js wasm 的导入和使用方式，避免不必要的报错。
 
 项目的包管理器使用 pnpm，请勿使用 yarn 或 npm。
