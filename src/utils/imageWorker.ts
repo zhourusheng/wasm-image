@@ -238,7 +238,7 @@ async function processWithWasm(
 
       case 'rotate': {
         const { angle } = params as { angle: number };
-        const center = new self.cv.Point2(src.cols / 2, src.rows / 2);
+        const center = new self.cv.Point(src.cols / 2, src.rows / 2);
         const rotationMatrix = self.cv.getRotationMatrix2D(center, angle, 1.0);
 
         // 计算旋转后的图像尺寸
@@ -249,16 +249,14 @@ async function processWithWasm(
         const newHeight = Math.round(src.cols * sin + src.rows * cos);
 
         // 调整变换矩阵以居中图像
-        rotationMatrix.doublePtr(0, 2)[0] += newWidth / 2 - src.cols / 2;
-        rotationMatrix.doublePtr(1, 2)[0] += newHeight / 2 - src.rows / 2;
+        rotationMatrix.data64F[2] += newWidth / 2 - src.cols / 2;
+        rotationMatrix.data64F[5] += newHeight / 2 - src.rows / 2;
 
         dst = new self.cv.Mat();
         const dsize = new self.cv.Size(newWidth, newHeight);
         self.cv.warpAffine(src, dst, rotationMatrix, dsize);
 
         rotationMatrix.delete();
-        center.delete();
-        dsize.delete();
         break;
       }
 
@@ -362,7 +360,6 @@ async function processWithWasm(
         const kernelSize = new self.cv.Size(validKsize, validKsize);
         // 使用高斯模糊，性能优于普通模糊
         self.cv.GaussianBlur(src, dst, kernelSize, 0);
-        kernelSize.delete();
         break;
       }
 
