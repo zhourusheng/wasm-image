@@ -1,7 +1,7 @@
+import { Button, Slider } from 'antd';
 import React from 'react';
-import { Slider, Button } from 'antd';
+import { useImageProcessing } from '../../hooks/useImageProcessing';
 import useEditorStore from '../../store/editorStore';
-import useImageProcessing from '../../hooks/useImageProcessing';
 import type { FilterParams } from '../../types';
 
 // 控制组件通用Props接口

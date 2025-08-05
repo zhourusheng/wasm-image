@@ -1,14 +1,14 @@
-import React, { useRef, useEffect } from 'react';
+import { Button, Slider, Spin, Tooltip } from 'antd';
 import { X } from 'lucide-react';
-import { Slider, Button, Tooltip, Spin } from 'antd';
+import React, { useEffect, useRef } from 'react';
+import { useImageProcessing } from '../../hooks/useImageProcessing';
 import useCollageStore from '../../store/collageStore';
 import useEditorStore from '../../store/editorStore';
 import useImageStore from '../../store/imageStore';
-import useImageProcessing from '../../hooks/useImageProcessing';
-import { getImageDataFromImage } from '../../utils/imageUtils';
-import notificationService from '../../utils/notificationService';
 import type { ImageDataInterface } from '../../types';
 import { toStandardImageData } from '../../types';
+import { getImageDataFromImage } from '../../utils/imageUtils';
+import notificationService from '../../utils/notificationService';
 
 // Canvas预览组件Props接口
 interface CanvasPreviewProps {

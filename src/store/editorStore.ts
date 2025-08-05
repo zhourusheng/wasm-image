@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import type {
+  CropArea,
   EditorStoreState,
   FilterParams,
   ToolType,
-  CropArea,
 } from '../types';
 
 const useEditorStore = create<EditorStoreState>(set => ({
@@ -24,6 +24,10 @@ const useEditorStore = create<EditorStoreState>(set => ({
   // 视图状态
   zoom: 1,
   pan: { x: 0, y: 0 },
+
+  // 图像处理状态
+  lastProcessedImageId: null,
+  canvasInitialized: false,
 
   // 设置Worker和OpenCV状态
   setWorkerReady: (isReady: boolean) => set({ workerReady: isReady }),
@@ -74,6 +78,19 @@ const useEditorStore = create<EditorStoreState>(set => ({
 
   resetView: () => {
     set({ zoom: 1, pan: { x: 0, y: 0 } });
+  },
+
+  // 图像处理缓存管理
+  setLastProcessedImageId: (id: string | null) => {
+    set({ lastProcessedImageId: id });
+  },
+
+  clearLastProcessedImageId: () => {
+    set({ lastProcessedImageId: null });
+  },
+
+  setCanvasInitialized: (initialized: boolean) => {
+    set({ canvasInitialized: initialized });
   },
 }));
 

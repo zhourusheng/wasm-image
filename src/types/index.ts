@@ -225,6 +225,8 @@ export interface EditorStoreState {
   cropArea: CropArea | null;
   zoom: number;
   pan: { x: number; y: number };
+  lastProcessedImageId: string | null;
+  canvasInitialized: boolean;
   // 方法
   setWorkerReady: (ready: boolean) => void;
   setOpenCVLoaded: (loaded: boolean) => void;
@@ -237,6 +239,9 @@ export interface EditorStoreState {
   setZoom: (zoom: number) => void;
   setPan: (pan: { x: number; y: number }) => void;
   resetView: () => void;
+  setLastProcessedImageId: (id: string | null) => void;
+  clearLastProcessedImageId: () => void;
+  setCanvasInitialized: (initialized: boolean) => void;
 }
 
 export interface UIStoreState {

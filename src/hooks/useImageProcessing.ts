@@ -20,7 +20,14 @@ interface ProcessedPayload {
 
 export const useImageProcessing = () => {
   const { currentImage, updateImage, setImage, clearHistory } = useImageStore();
-  const { imageWorker, workerReady } = useEditorStore();
+  const {
+    imageWorker,
+    workerReady,
+    clearLastProcessedImageId,
+    setCropMode,
+    setActiveTool,
+    updateToolParams,
+  } = useEditorStore();
   const { setLoading, setCanvasRendered, updateDeviceInfo } = useUiStore();
 
   // 核心图像处理函数
@@ -95,13 +102,29 @@ export const useImageProcessing = () => {
       setCanvasRendered(false);
       updateDeviceInfo({ touchSupport: 'ontouchstart' in window });
 
-      // 清空历史记录并设置新图像
-      clearHistory();
+      // 重置所有编辑状态
+      clearHistory(); // 清空历史记录
+      clearLastProcessedImageId(); // 清除图像处理缓存，确保重新加载
+      setCropMode(false); // 退出裁剪模式
+      setActiveTool(null); // 清除激活的工具
+      updateToolParams({}); // 重置工具参数
+      // 注意：不重置canvasInitialized，因为Canvas控制权已经转移给Worker，不能重复转移
+
       setImage(imageData); // 设置图像到状态中，Canvas组件的useEffect会自动处理渲染
 
       // 注意：不需要手动发送Worker消息，Canvas组件的useEffect会监听currentImage变化并处理
     },
-    [setLoading, setCanvasRendered, clearHistory, updateDeviceInfo, setImage]
+    [
+      setLoading,
+      setCanvasRendered,
+      clearHistory,
+      updateDeviceInfo,
+      setImage,
+      clearLastProcessedImageId,
+      setCropMode,
+      setActiveTool,
+      updateToolParams,
+    ]
   );
 
   // 处理压缩预览结果
@@ -126,21 +149,35 @@ export const useImageProcessing = () => {
   // 处理常规图像处理结果
   const handleImageProcessed = useCallback(
     (payload: ProcessedPayload) => {
-      console.log('Worker 完成图像处理');
+      console.log('Worker 完成图像处理', {
+        operation: payload.perfLog?.operation,
+        isHistoryNavigation: payload.isHistoryNavigation,
+      });
+
       if (payload.perfLog) {
         logPerformanceToConsole(payload.perfLog);
       }
 
       if (payload.imageData) {
         if (payload.perfLog?.operation === 'original') {
-          // 对于original操作，确保图像状态正确设置
-          // 如果是首次加载或历史导航，需要设置图像状态
-          if (!currentImage || payload.isHistoryNavigation) {
+          // 对于original操作，需要区分不同情况
+          if (payload.isHistoryNavigation) {
+            // 历史导航：直接设置图像，不添加到历史记录
+            console.log('历史导航操作，直接设置图像状态');
+            // 注意：不调用setImage，因为undo/redo已经更新了imageStore状态
+            // 只需要设置渲染状态
+            setCanvasRendered(true);
+          } else if (!currentImage) {
+            // 首次加载：设置图像状态
+            console.log('首次加载图像');
             setImage(payload.imageData);
+            setCanvasRendered(true);
+          } else {
+            // 重复处理：只更新渲染状态
+            setCanvasRendered(true);
           }
-          setCanvasRendered(true);
         } else {
-          // 对于其他操作，正常更新图像数据
+          // 非original操作，正常更新图像数据
           if (!payload.isHistoryNavigation) {
             updateImage(payload.imageData);
           } else {
@@ -176,5 +213,3 @@ export const useImageProcessing = () => {
     processNewImage,
   };
 };
-
-export default useImageProcessing;

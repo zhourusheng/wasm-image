@@ -3,7 +3,7 @@ import Canvas from './components/layout/Canvas';
 import Footer from './components/layout/Footer';
 import Header from './components/layout/Header';
 import Toolbar from './components/layout/Toolbar';
-import useImageProcessing from './hooks/useImageProcessing';
+import { useImageProcessing } from './hooks/useImageProcessing';
 import useEditorStore from './store/editorStore';
 
 // 懒加载的组件 - 这些组件不会包含在初始bundle中
@@ -14,7 +14,8 @@ const CollageMode = lazy(() => import('./components/modes/CollageMode'));
 const App: React.FC = () => {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const { handleWorkerMessage } = useImageProcessing();
-  const { setImageWorker, activeTool, isCollageMode } = useEditorStore();
+  const { setImageWorker, activeTool, isCollageMode, setCanvasInitialized } =
+    useEditorStore();
 
   useEffect(() => {
     // 创建Worker实例
@@ -22,6 +23,7 @@ const App: React.FC = () => {
       new URL('./utils/imageWorker.ts?worker', import.meta.url)
     );
     setImageWorker(worker);
+    setCanvasInitialized(false); // 重置Canvas初始化状态，需要重新初始化
 
     worker.onmessage = (e: MessageEvent) => {
       const { type } = e.data;
@@ -36,7 +38,7 @@ const App: React.FC = () => {
     };
 
     return () => worker.terminate();
-  }, [handleWorkerMessage, setImageWorker]);
+  }, [handleWorkerMessage, setImageWorker, setCanvasInitialized]);
 
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans">

@@ -1,8 +1,8 @@
 import { Button, Tooltip } from 'antd';
 import { Check, Redo, Trash2, Undo, X } from 'lucide-react';
-import React, { RefObject, useEffect, useRef } from 'react';
+import React, { RefObject, useEffect } from 'react';
 import useCanvas from '../../hooks/useCanvas';
-import useImageProcessing from '../../hooks/useImageProcessing';
+import { useImageProcessing } from '../../hooks/useImageProcessing';
 import useEditorStore from '../../store/editorStore';
 import useImageStore from '../../store/imageStore';
 import useUiStore from '../../store/uiStore';
@@ -78,6 +78,7 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
     undo,
     redo,
     clearHistory,
+    revertToOriginal,
   } = useImageStore();
 
   const {
@@ -88,9 +89,13 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
     workerReady,
     opencvLoaded,
     zoom,
+    lastProcessedImageId,
+    setLastProcessedImageId,
+    canvasInitialized,
+    setCanvasInitialized,
   } = useEditorStore();
 
-  const { loading, setLoading } = useUiStore();
+  const { loading, setLoading, setCanvasRendered } = useUiStore();
   const { processEdit } = useImageProcessing();
 
   const {
@@ -103,34 +108,50 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
 
   // 初始化Canvas与Worker连接
   useEffect(() => {
-    if (canvasRef.current && imageWorker && opencvLoaded) {
+    if (
+      canvasRef.current &&
+      imageWorker &&
+      opencvLoaded &&
+      !canvasInitialized
+    ) {
       console.log('开始初始化Canvas与Worker连接');
-      const offscreen = canvasRef.current.transferControlToOffscreen();
-      imageWorker.postMessage(
-        {
-          type: 'init',
-          payload: { canvas: offscreen },
-        },
-        [offscreen]
-      );
+      try {
+        const offscreen = canvasRef.current.transferControlToOffscreen();
+        imageWorker.postMessage(
+          {
+            type: 'init',
+            payload: { canvas: offscreen },
+          },
+          [offscreen]
+        );
+        setCanvasInitialized(true);
+      } catch (error) {
+        console.warn('Canvas控制权转移失败:', error);
+      }
     }
-  }, [canvasRef, imageWorker, opencvLoaded]);
+  }, [
+    canvasRef,
+    imageWorker,
+    opencvLoaded,
+    canvasInitialized,
+    setCanvasInitialized,
+  ]);
 
   // 当currentImage变化时，通过Worker处理图像显示
-  // 使用ref来避免无限循环
-  const lastProcessedImageRef = useRef<string | null>(null);
-
+  // 使用全局状态来避免重复处理
   useEffect(() => {
     if (currentImage && workerReady && imageWorker) {
       // 生成图像的唯一标识，避免重复处理
       const imageId = `${currentImage.width}x${currentImage.height}-${currentImage.data.length}`;
 
-      // 如果这个图像已经处理过，就不再重复处理
-      if (lastProcessedImageRef.current === imageId) {
+      // 如果这个图像已经处理过，直接完成状态更新，不重复处理
+      if (lastProcessedImageId === imageId) {
+        setLoading(false);
+        setCanvasRendered(true);
         return;
       }
 
-      lastProcessedImageRef.current = imageId;
+      setLastProcessedImageId(imageId);
 
       // 通过Worker处理图像显示，而不是直接在主线程绘制
       imageWorker.postMessage({
@@ -142,14 +163,27 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
         },
       });
     }
-  }, [currentImage, workerReady, imageWorker]);
+  }, [
+    currentImage,
+    workerReady,
+    imageWorker,
+    setLoading,
+    setCanvasRendered,
+    lastProcessedImageId,
+    setLastProcessedImageId,
+  ]);
 
   // 历史记录操作
   const handleUndo = (): void => {
-    if (!canUndo) return;
+    if (!canUndo || loading) return;
+
     const prevState = undo();
     if (prevState && workerReady && imageWorker) {
       setLoading(true);
+
+      // 清除重复检测缓存，确保Worker重新处理图像
+      setLastProcessedImageId(null);
+
       imageWorker.postMessage({
         type: 'image-process',
         payload: {
@@ -162,10 +196,15 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
   };
 
   const handleRedo = (): void => {
-    if (!canRedo) return;
+    if (!canRedo || loading) return;
+
     const nextState = redo();
     if (nextState && workerReady && imageWorker) {
       setLoading(true);
+
+      // 清除重复检测缓存，确保Worker重新处理图像
+      setLastProcessedImageId(null);
+
       imageWorker.postMessage({
         type: 'image-process',
         payload: {
@@ -186,8 +225,22 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
       () => {
         setLoading(true);
         clearHistory();
-        // TODO: 实现恢复到原始图像的功能
-        console.log('Revert to original - feature not fully implemented');
+        const originalImageData = revertToOriginal();
+
+        if (originalImageData && workerReady && imageWorker) {
+          // 通过Worker重新渲染原始图像
+          imageWorker.postMessage({
+            type: 'image-process',
+            payload: {
+              imageData: originalImageData,
+              action: 'original',
+              isHistoryNavigation: false,
+            },
+          });
+        } else {
+          setLoading(false);
+          notificationService.warning('没有可用的原始图像');
+        }
       }
     );
   };

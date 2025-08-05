@@ -1,38 +1,86 @@
-import React, { RefObject } from 'react';
 import {
+  CompressOutlined,
+  EyeOutlined,
+  OneToOneOutlined,
   ZoomInOutlined,
   ZoomOutOutlined,
-  EyeOutlined,
-  CompressOutlined,
-  OneToOneOutlined,
 } from '@ant-design/icons';
 import { Button, Tooltip } from 'antd';
-import useImageStore from '../../store/imageStore';
-import useEditorStore from '../../store/editorStore';
-import useUiStore from '../../store/uiStore';
+import React, { RefObject, useRef } from 'react';
 import useZoom from '../../hooks/useZoom';
+import useEditorStore from '../../store/editorStore';
+import useImageStore from '../../store/imageStore';
+import useUiStore from '../../store/uiStore';
 
 interface FooterProps {
   containerRef: RefObject<HTMLDivElement | null>;
 }
 
 const Footer: React.FC<FooterProps> = ({ containerRef }) => {
-  const { currentImage, originalFileInfo } = useImageStore();
-  const { zoom } = useEditorStore();
+  const { currentImage, originalImage, originalFileInfo, setImage } =
+    useImageStore();
+  const { zoom, imageWorker, workerReady } = useEditorStore();
   const { loading } = useUiStore();
   const { handleManualZoom, resetToFitZoom, resetToOriginalZoom } =
     useZoom(containerRef);
 
+  // 用于保存比较前的图像状态
+  const imageBeforeCompareRef = useRef<typeof currentImage>(null);
+
   const handleCompareStart = (): void => {
-    // 暂时注释掉原图比较功能，因为originalImage字段可能不存在
-    // TODO: 实现原图比较功能
-    console.log('Compare start - feature not implemented');
+    if (
+      !originalImage ||
+      !currentImage ||
+      loading ||
+      !imageWorker ||
+      !workerReady
+    ) {
+      return;
+    }
+
+    // 保存当前图像状态
+    imageBeforeCompareRef.current = currentImage;
+
+    // 临时切换到原始图像进行显示
+    setImage(originalImage);
+
+    // 通过Worker重新渲染原始图像
+    imageWorker.postMessage({
+      type: 'image-process',
+      payload: {
+        imageData: originalImage,
+        action: 'original',
+        isHistoryNavigation: true, // 标记为历史导航，不添加到历史记录
+      },
+    });
   };
 
   const handleCompareEnd = (): void => {
-    // 暂时注释掉原图比较功能
-    // TODO: 实现原图比较功能
-    console.log('Compare end - feature not implemented');
+    if (
+      !imageBeforeCompareRef.current ||
+      loading ||
+      !imageWorker ||
+      !workerReady
+    ) {
+      return;
+    }
+
+    // 恢复比较前的图像状态
+    const savedImage = imageBeforeCompareRef.current;
+    setImage(savedImage);
+
+    // 通过Worker重新渲染保存的图像
+    imageWorker.postMessage({
+      type: 'image-process',
+      payload: {
+        imageData: savedImage,
+        action: 'original',
+        isHistoryNavigation: true, // 标记为历史导航，不添加到历史记录
+      },
+    });
+
+    // 清空保存的状态
+    imageBeforeCompareRef.current = null;
   };
 
   const handleZoomOut = (): void => {
@@ -83,14 +131,14 @@ const Footer: React.FC<FooterProps> = ({ containerRef }) => {
 
           <div className="w-px h-4 bg-gray-200 dark:bg-gray-600"></div>
 
-          <Tooltip title="按住查看原图">
+          <Tooltip title={originalImage ? '按住查看原图' : '没有原始图像'}>
             <Button
               type="text"
               icon={<EyeOutlined />}
               onMouseDown={handleCompareStart}
               onMouseUp={handleCompareEnd}
               onMouseLeave={handleCompareEnd}
-              disabled={loading}
+              disabled={loading || !originalImage}
             />
           </Tooltip>
 
