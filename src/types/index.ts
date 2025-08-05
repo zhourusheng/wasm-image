@@ -90,7 +90,8 @@ export type ImageOperation =
   | 'threshold'
   | 'crop'
   | 'rotate'
-  | 'flip';
+  | 'flip'
+  | 'watermark';
 
 // 导出格式类型
 export type ExportFormat = 'png' | 'jpeg' | 'webp';
@@ -139,6 +140,7 @@ export type ToolType =
   | 'saturation'
   | 'colorBalance'
   | 'compress'
+  | 'watermark'
   | null;
 
 // 裁剪区域接口

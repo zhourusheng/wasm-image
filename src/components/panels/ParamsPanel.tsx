@@ -1,4 +1,15 @@
-import { Button, Slider } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
+import {
+  Button,
+  ColorPicker,
+  Image,
+  Input,
+  Radio,
+  Select,
+  Slider,
+  Switch,
+  Upload,
+} from 'antd';
 import React from 'react';
 import { useImageProcessing } from '../../hooks/useImageProcessing';
 import useEditorStore from '../../store/editorStore';
@@ -211,6 +222,246 @@ const CompressControls: React.FC<ControlProps> = ({ params, onChange }) => {
   );
 };
 
+// 水印控制面板（支持文字和图片水印）
+const WatermarkControls: React.FC<ControlProps> = ({ params, onChange }) => {
+  const type = (params.type as string) || 'text'; // 'text' 或 'image'
+  const text = (params.text as string) || '水印文字';
+  const x = (params.x as number) || 50;
+  const y = (params.y as number) || 50;
+  const fontSize = (params.fontSize as number) || 36;
+  const color = (params.color as string) || '#ffffff';
+  const opacity = (params.opacity as number) || 0.8;
+  const fontFamily = (params.fontFamily as string) || 'Arial';
+  const bold = (params.bold as boolean) || false;
+  const italic = (params.italic as boolean) || false;
+  const imageData = params.imageData as string; // base64 图片数据
+  const scale = (params.scale as number) || 0.3; // 图片缩放比例
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    onChange({ ...params, text: e.target.value });
+  };
+
+  const handlePositionXChange = (value: number): void => {
+    onChange({ ...params, x: value });
+  };
+
+  const handlePositionYChange = (value: number): void => {
+    onChange({ ...params, y: value });
+  };
+
+  const handleFontSizeChange = (value: number): void => {
+    onChange({ ...params, fontSize: value });
+  };
+
+  const handleColorChange = (color: any): void => {
+    const hexColor = typeof color === 'string' ? color : color.toHexString();
+    onChange({ ...params, color: hexColor });
+  };
+
+  const handleOpacityChange = (value: number): void => {
+    onChange({ ...params, opacity: value });
+  };
+
+  const handleFontFamilyChange = (value: string): void => {
+    onChange({ ...params, fontFamily: value });
+  };
+
+  const handleBoldChange = (checked: boolean): void => {
+    onChange({ ...params, bold: checked });
+  };
+
+  const handleItalicChange = (checked: boolean): void => {
+    onChange({ ...params, italic: checked });
+  };
+
+  const handleTypeChange = (e: any): void => {
+    onChange({ ...params, type: e.target.value });
+  };
+
+  const handleScaleChange = (value: number): void => {
+    onChange({ ...params, scale: value });
+  };
+
+  const handleImageUpload = (file: File): boolean => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = e.target?.result as string;
+      onChange({ ...params, imageData: result });
+    };
+    reader.readAsDataURL(file);
+    return false; // 阻止默认上传行为
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* 水印类型选择 */}
+      <div>
+        <label className="text-sm font-medium mb-2 block">水印类型</label>
+        <Radio.Group value={type} onChange={handleTypeChange}>
+          <Radio value="text">文字水印</Radio>
+          <Radio value="image">图片水印</Radio>
+        </Radio.Group>
+      </div>
+
+      {/* 文字水印配置 */}
+      {type === 'text' && (
+        <div>
+          <label className="text-sm font-medium mb-2 block">水印文字</label>
+          <Input
+            value={text}
+            onChange={handleTextChange}
+            placeholder="请输入水印文字"
+            maxLength={50}
+          />
+        </div>
+      )}
+
+      {/* 图片水印配置 */}
+      {type === 'image' && (
+        <div>
+          <label className="text-sm font-medium mb-2 block">上传水印图片</label>
+          <Upload
+            beforeUpload={handleImageUpload}
+            showUploadList={false}
+            accept="image/*"
+          >
+            <Button icon={<UploadOutlined />}>选择图片</Button>
+          </Upload>
+          {imageData && (
+            <div className="mt-2">
+              <Image
+                width={100}
+                src={imageData}
+                preview={false}
+                style={{ border: '1px solid #d9d9d9', borderRadius: '4px' }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 位置控制 */}
+      <div>
+        <label className="text-sm font-medium mb-2 block">水平位置: {x}%</label>
+        <Slider
+          min={0}
+          max={100}
+          step={1}
+          value={x}
+          onChange={handlePositionXChange}
+        />
+      </div>
+
+      <div>
+        <label className="text-sm font-medium mb-2 block">垂直位置: {y}%</label>
+        <Slider
+          min={0}
+          max={100}
+          step={1}
+          value={y}
+          onChange={handlePositionYChange}
+        />
+      </div>
+
+      {/* 图片缩放控制 */}
+      {type === 'image' && (
+        <div>
+          <label className="text-sm font-medium mb-2 block">
+            图片大小: {(scale * 100).toFixed(0)}%
+          </label>
+          <Slider
+            min={0.1}
+            max={2}
+            step={0.1}
+            value={scale}
+            onChange={handleScaleChange}
+          />
+        </div>
+      )}
+
+      {/* 字体设置 - 仅文字水印 */}
+      {type === 'text' && (
+        <>
+          <div>
+            <label className="text-sm font-medium mb-2 block">字体</label>
+            <Select
+              value={fontFamily}
+              onChange={handleFontFamilyChange}
+              style={{ width: '100%' }}
+              options={[
+                { value: 'Arial', label: 'Arial' },
+                { value: 'Helvetica', label: 'Helvetica' },
+                { value: 'Times New Roman', label: 'Times New Roman' },
+                { value: 'Georgia', label: 'Georgia' },
+                { value: 'Verdana', label: 'Verdana' },
+                { value: 'Courier New', label: 'Courier New' },
+                { value: 'Microsoft YaHei', label: '微软雅黑' },
+                { value: 'SimHei', label: '黑体' },
+                { value: 'SimSun', label: '宋体' },
+              ]}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              字体大小: {fontSize}px
+            </label>
+            <Slider
+              min={12}
+              max={120}
+              step={2}
+              value={fontSize}
+              onChange={handleFontSizeChange}
+            />
+          </div>
+
+          {/* 颜色 - 仅文字水印 */}
+          <div>
+            <label className="text-sm font-medium mb-2 block">颜色</label>
+            <ColorPicker
+              value={color}
+              onChange={handleColorChange}
+              showText
+              style={{ width: '100%' }}
+            />
+          </div>
+        </>
+      )}
+
+      <div>
+        <label className="text-sm font-medium mb-2 block">
+          透明度: {(opacity * 100).toFixed(0)}%
+        </label>
+        <Slider
+          min={0.1}
+          max={1}
+          step={0.1}
+          value={opacity}
+          onChange={handleOpacityChange}
+        />
+      </div>
+
+      {/* 字体样式 - 仅文字水印 */}
+      {type === 'text' && (
+        <div className="flex space-x-4">
+          <div className="flex items-center space-x-2">
+            <Switch checked={bold} onChange={handleBoldChange} size="small" />
+            <span className="text-sm">粗体</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Switch
+              checked={italic}
+              onChange={handleItalicChange}
+              size="small"
+            />
+            <span className="text-sm">斜体</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // 工具名称映射
 const TOOL_NAMES: Record<string, string> = {
   brightness: '亮度',
@@ -219,6 +470,7 @@ const TOOL_NAMES: Record<string, string> = {
   blur: '模糊',
   colorBalance: '色彩平衡',
   compress: '压缩',
+  watermark: '文字水印',
 };
 
 const ParamsPanel: React.FC = () => {
@@ -265,6 +517,13 @@ const ParamsPanel: React.FC = () => {
           <CompressControls
             params={toolParams}
             onChange={handleCompressParamsChange}
+          />
+        );
+      case 'watermark':
+        return (
+          <WatermarkControls
+            params={toolParams}
+            onChange={handleParamsChange}
           />
         );
       default:

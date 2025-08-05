@@ -194,15 +194,120 @@ function applyContrastJS(
   return imageData;
 }
 
+async function applyWatermarkJS(
+  imageData: ImageDataInterface,
+  params?: FilterParams
+): Promise<ImageDataInterface> {
+  // 创建临时canvas用于绘制水印
+  const canvas = new OffscreenCanvas(imageData.width, imageData.height);
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    console.error('无法获取2D上下文');
+    return imageData;
+  }
+
+  // 将原始图像数据绘制到canvas
+  ctx.putImageData(
+    new ImageData(imageData.data, imageData.width, imageData.height),
+    0,
+    0
+  );
+
+  // 获取水印参数
+  const type = (params?.type as string) || 'text';
+  const x = (params?.x as number) || 50;
+  const y = (params?.y as number) || 50;
+  const opacity = (params?.opacity as number) || 0.8;
+
+  // 计算实际位置（百分比转换为像素）
+  const actualX = (x / 100) * imageData.width;
+  const actualY = (y / 100) * imageData.height;
+
+  ctx.globalAlpha = opacity;
+
+  if (type === 'text') {
+    // 文字水印
+    const text = (params?.text as string) || '水印文字';
+    const fontSize = (params?.fontSize as number) || 36;
+    const color = (params?.color as string) || '#ffffff';
+    const fontFamily = (params?.fontFamily as string) || 'Arial';
+    const bold = (params?.bold as boolean) || false;
+    const italic = (params?.italic as boolean) || false;
+
+    // 设置字体样式
+    let fontStyle = '';
+    if (italic) fontStyle += 'italic ';
+    if (bold) fontStyle += 'bold ';
+    fontStyle += `${fontSize}px ${fontFamily}`;
+
+    ctx.font = fontStyle;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    // 添加文字描边以增强可见性
+    ctx.strokeStyle = color === '#ffffff' ? '#000000' : '#ffffff';
+    ctx.lineWidth = Math.max(1, fontSize / 20);
+    ctx.strokeText(text, actualX, actualY);
+
+    // 绘制文字
+    ctx.fillText(text, actualX, actualY);
+  } else if (type === 'image' && params?.imageData) {
+    // 图片水印
+    const imageDataUrl = params.imageData as string;
+    const scale = (params?.scale as number) || 0.3;
+
+    try {
+      // 在Worker中使用createImageBitmap加载图片
+      const response = await fetch(imageDataUrl);
+      const blob = await response.blob();
+      const imageBitmap = await createImageBitmap(blob);
+
+      // 计算缩放后的尺寸
+      const scaledWidth = imageBitmap.width * scale;
+      const scaledHeight = imageBitmap.height * scale;
+
+      // 绘制图片水印
+      ctx.drawImage(imageBitmap, actualX, actualY, scaledWidth, scaledHeight);
+
+      // 清理资源
+      imageBitmap.close();
+    } catch (error) {
+      console.error('图片水印加载失败:', error);
+      // 如果图片加载失败，只返回原图
+    }
+  }
+
+  // 获取处理后的图像数据
+  const resultImageData = ctx.getImageData(
+    0,
+    0,
+    imageData.width,
+    imageData.height
+  );
+
+  // 返回新的ImageDataInterface
+  return {
+    data: new Uint8ClampedArray(resultImageData.data),
+    width: resultImageData.width,
+    height: resultImageData.height,
+  };
+}
+
 // 纯JS滤镜映射
 const pureJsFilters: Record<
   string,
-  (imageData: ImageDataInterface, params?: FilterParams) => ImageDataInterface
+  (
+    imageData: ImageDataInterface,
+    params?: FilterParams
+  ) => ImageDataInterface | Promise<ImageDataInterface>
 > = {
   sepia: applySepiaJS,
   grayscale: applyGrayscaleJS,
   brightness: applyBrightnessJS,
   contrast: applyContrastJS,
+  watermark: applyWatermarkJS,
 };
 
 // --- Worker 设置与消息处理 ---
@@ -607,8 +712,9 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
         if (jsFilter) {
           timer.step('js_engine_start');
           console.log(`🚀 [纯JS引擎] 开始处理: ${payload.action}`);
-          // 直接修改了 payload.imageData
-          resultImageData = jsFilter(payload.imageData, payload.params);
+          // 处理同步和异步函数
+          const filterResult = jsFilter(payload.imageData, payload.params);
+          resultImageData = await Promise.resolve(filterResult);
           timer.step('js_engine_end');
 
           // 由于 JS 方案不经过 Wasm，需要手动渲染

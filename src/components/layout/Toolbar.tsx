@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   SquarePen,
   Sun,
+  Type,
   Wand2,
 } from 'lucide-react';
 import React from 'react';
@@ -218,6 +219,37 @@ const Toolbar: React.FC = () => {
           icon={<History size={20} />}
           title="复古"
           onClick={() => handleDirectEffect('sepia')}
+          disabled={!currentImage || loading}
+        />
+      </div>
+
+      <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+
+      {/* 水印工具组 */}
+      <div className="flex flex-col items-center space-y-1 w-full">
+        <span className="font-medium text-gray-500 dark:text-gray-400">
+          水印
+        </span>
+        <ToolButton
+          icon={<Type size={20} />}
+          title="文字水印"
+          isActive={activeTool === 'watermark'}
+          onClick={() =>
+            handleToolActivate('watermark', {
+              type: 'text',
+              text: '水印文字',
+              x: 50,
+              y: 50,
+              fontSize: 36,
+              color: '#ffffff',
+              opacity: 0.8,
+              fontFamily: 'Arial',
+              bold: false,
+              italic: false,
+              scale: 0.3,
+              imageData: null,
+            })
+          }
           disabled={!currentImage || loading}
         />
       </div>
