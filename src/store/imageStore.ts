@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import type {
-  ImageStoreState,
-  ImageDataInterface,
   HistoryItem,
+  ImageDataInterface,
+  ImageStoreState,
 } from '../types';
 import HistoryManager from '../utils/historyManager';
-import { loadImageFromFile, getImageDataFromImage } from '../utils/imageUtils';
+import { getImageDataFromImage, loadImageFromFile } from '../utils/imageUtils';
 import notificationService from '../utils/notificationService';
 
 interface FileInfo {
@@ -43,11 +43,16 @@ const useImageStore = create<ImageStoreState & ImageStoreInternalState>(
     setImage: (imageData: ImageDataInterface) => {
       const historyManager = get().historyManager;
 
+      // 如果是第一张图片，先清空历史记录确保状态正确
+      const state = get();
+      if (!state.originalImage) {
+        historyManager.clear();
+      }
+
       // 添加到历史记录
       historyManager.add(imageData);
 
       // 如果是第一张图片，也设置为原始图片
-      const state = get();
       if (!state.originalImage) {
         set({
           originalImage: imageData,
@@ -160,7 +165,20 @@ const useImageStore = create<ImageStoreState & ImageStoreInternalState>(
       const originalImage = get().originalImage;
       if (!originalImage) return null;
 
-      get().setImage(originalImage);
+      const historyManager = get().historyManager;
+
+      // 清空历史记录并重新添加原始图像
+      historyManager.clear();
+      historyManager.add(originalImage);
+
+      set({
+        currentImage: originalImage,
+        canUndo: historyManager.canUndo(),
+        canRedo: historyManager.canRedo(),
+        history: historyManager.getHistory(),
+        historyIndex: historyManager.getCurrentIndex(),
+      });
+
       return originalImage;
     },
 

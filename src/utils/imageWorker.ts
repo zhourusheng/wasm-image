@@ -208,8 +208,279 @@ const pureJsFilters: Record<
 
 // --- Worker 设置与消息处理 ---
 
-// 暂时禁用wasmBridge，只使用JS滤镜
-// 后续可以通过其他方式加载wasmBridge
+// 引入wasmBridge处理函数
+// 注意：在Worker环境中，我们需要直接内联wasmBridge的代码，避免import问题
+async function processWithWasm(
+  imageData: ImageDataInterface,
+  action: string,
+  params?: FilterParams
+): Promise<ImageDataInterface> {
+  // 直接调用wasmBridge逻辑
+  if (!self.cv) {
+    throw new Error('OpenCV未初始化');
+  }
+
+  const src = self.cv.matFromImageData(imageData);
+  let dst: any;
+
+  try {
+    switch (action) {
+      case 'crop': {
+        const { x, y, width, height } = params as {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        };
+        const rect = new self.cv.Rect(x, y, width, height);
+        dst = src.roi(rect);
+        break;
+      }
+
+      case 'rotate': {
+        const { angle } = params as { angle: number };
+        const center = new self.cv.Point2(src.cols / 2, src.rows / 2);
+        const rotationMatrix = self.cv.getRotationMatrix2D(center, angle, 1.0);
+
+        // 计算旋转后的图像尺寸
+        const radians = (angle * Math.PI) / 180;
+        const cos = Math.abs(Math.cos(radians));
+        const sin = Math.abs(Math.sin(radians));
+        const newWidth = Math.round(src.cols * cos + src.rows * sin);
+        const newHeight = Math.round(src.cols * sin + src.rows * cos);
+
+        // 调整变换矩阵以居中图像
+        rotationMatrix.doublePtr(0, 2)[0] += newWidth / 2 - src.cols / 2;
+        rotationMatrix.doublePtr(1, 2)[0] += newHeight / 2 - src.rows / 2;
+
+        dst = new self.cv.Mat();
+        const dsize = new self.cv.Size(newWidth, newHeight);
+        self.cv.warpAffine(src, dst, rotationMatrix, dsize);
+
+        rotationMatrix.delete();
+        center.delete();
+        dsize.delete();
+        break;
+      }
+
+      case 'flip': {
+        const { mode } = params as { mode: number };
+        dst = new self.cv.Mat();
+        self.cv.flip(src, dst, mode);
+        break;
+      }
+
+      case 'brightness': {
+        const { delta } = params as { delta: number };
+        dst = new self.cv.Mat();
+        const deltaMat = new self.cv.Mat(
+          src.rows,
+          src.cols,
+          src.type(),
+          new self.cv.Scalar(delta, delta, delta, 0)
+        );
+        self.cv.add(src, deltaMat, dst);
+        deltaMat.delete();
+        break;
+      }
+
+      case 'contrast': {
+        const { factor } = params as { factor: number };
+        dst = new self.cv.Mat();
+        src.convertTo(dst, -1, factor, 0);
+        break;
+      }
+
+      case 'saturation': {
+        const { factor } = params as { factor: number };
+
+        // 使用HSV颜色空间处理饱和度
+        dst = new self.cv.Mat();
+        const hsv = new self.cv.Mat();
+        self.cv.cvtColor(src, hsv, self.cv.COLOR_RGB2HSV);
+
+        // 分离HSV通道
+        const hsvChannels = new self.cv.MatVector();
+        self.cv.split(hsv, hsvChannels);
+
+        // 调整饱和度通道（索引1）
+        const satChannel = hsvChannels.get(1);
+        satChannel.convertTo(satChannel, -1, factor, 0);
+
+        // 合并通道
+        self.cv.merge(hsvChannels, hsv);
+        self.cv.cvtColor(hsv, dst, self.cv.COLOR_HSV2RGB);
+
+        hsv.delete();
+        hsvChannels.delete();
+        break;
+      }
+
+      case 'colorBalance': {
+        const { red, green, blue } = params as {
+          red: number;
+          green: number;
+          blue: number;
+        };
+
+        // 分离RGB通道
+        const channels = new self.cv.MatVector();
+        self.cv.split(src, channels);
+
+        // 调整各通道
+        if (red !== 0) {
+          const rChannel = channels.get(0);
+          rChannel.convertTo(rChannel, -1, 1, red);
+        }
+        if (green !== 0) {
+          const gChannel = channels.get(1);
+          gChannel.convertTo(gChannel, -1, 1, green);
+        }
+        if (blue !== 0) {
+          const bChannel = channels.get(2);
+          bChannel.convertTo(bChannel, -1, 1, blue);
+        }
+
+        dst = new self.cv.Mat();
+        self.cv.merge(channels, dst);
+        channels.delete();
+        break;
+      }
+
+      case 'blur': {
+        const { ksize = 5 } = params as { ksize?: number };
+        dst = new self.cv.Mat();
+        const kSize = new self.cv.Size(ksize, ksize);
+        self.cv.blur(src, dst, kSize);
+        kSize.delete();
+        break;
+      }
+
+      case 'grayscale': {
+        dst = new self.cv.Mat();
+        self.cv.cvtColor(src, dst, self.cv.COLOR_RGB2GRAY);
+        // 转换回RGB格式以保持一致性
+        const rgbDst = new self.cv.Mat();
+        self.cv.cvtColor(dst, rgbDst, self.cv.COLOR_GRAY2RGB);
+        dst.delete();
+        dst = rgbDst;
+        break;
+      }
+
+      case 'canny': {
+        const { threshold1 = 50, threshold2 = 150 } = params as {
+          threshold1?: number;
+          threshold2?: number;
+        };
+        const gray = new self.cv.Mat();
+        self.cv.cvtColor(src, gray, self.cv.COLOR_RGB2GRAY);
+
+        dst = new self.cv.Mat();
+        self.cv.Canny(gray, dst, threshold1, threshold2);
+
+        // 转换回RGB格式
+        const rgbDst = new self.cv.Mat();
+        self.cv.cvtColor(dst, rgbDst, self.cv.COLOR_GRAY2RGB);
+
+        gray.delete();
+        dst.delete();
+        dst = rgbDst;
+        break;
+      }
+
+      case 'threshold': {
+        const {
+          thresh = 127,
+          maxval = 255,
+          type = 0,
+        } = params as { thresh?: number; maxval?: number; type?: number };
+        const gray = new self.cv.Mat();
+        self.cv.cvtColor(src, gray, self.cv.COLOR_RGB2GRAY);
+
+        dst = new self.cv.Mat();
+        self.cv.threshold(gray, dst, thresh, maxval, type);
+
+        // 转换回RGB格式
+        const rgbDst = new self.cv.Mat();
+        self.cv.cvtColor(dst, rgbDst, self.cv.COLOR_GRAY2RGB);
+
+        gray.delete();
+        dst.delete();
+        dst = rgbDst;
+        break;
+      }
+
+      case 'emboss': {
+        const kernel = self.cv.matFromArray(
+          3,
+          3,
+          self.cv.CV_32FC1,
+          [-2, -1, 0, -1, 1, 1, 0, 1, 2]
+        );
+        dst = new self.cv.Mat();
+        self.cv.filter2D(src, dst, -1, kernel);
+        kernel.delete();
+        break;
+      }
+
+      case 'sepia': {
+        // 使用transform实现sepia效果
+        const kernel = self.cv.matFromArray(
+          4,
+          4,
+          self.cv.CV_32FC1,
+          [
+            0.272, 0.534, 0.131, 0, 0.349, 0.686, 0.168, 0, 0.393, 0.769, 0.189,
+            0, 0, 0, 0, 1,
+          ]
+        );
+        dst = new self.cv.Mat();
+        self.cv.transform(src, dst, kernel);
+        kernel.delete();
+        break;
+      }
+
+      case 'sharpen': {
+        const kernel = self.cv.matFromArray(
+          3,
+          3,
+          self.cv.CV_32FC1,
+          [0, -1, 0, -1, 5, -1, 0, -1, 0]
+        );
+        dst = new self.cv.Mat();
+        self.cv.filter2D(src, dst, -1, kernel);
+        kernel.delete();
+        break;
+      }
+
+      case 'compress': {
+        // 压缩操作主要是调整质量，这里直接返回原图像
+        // 实际的压缩会在导出时处理
+        dst = src.clone();
+        break;
+      }
+
+      default:
+        throw new Error(`不支持的操作: ${action}`);
+    }
+
+    // 转换回ImageData
+    const resultImageData = new ImageData(
+      new Uint8ClampedArray(dst.data),
+      dst.cols,
+      dst.rows
+    ) as ImageDataInterface;
+
+    src.delete();
+    dst.delete();
+
+    return resultImageData;
+  } catch (error) {
+    src.delete();
+    if (dst) dst.delete();
+    throw error;
+  }
+}
 
 // 初始化Module
 (self as any).Module = {
@@ -344,9 +615,29 @@ self.onmessage = async (e: MessageEvent<WorkerMessageEvent>) => {
             ctx.putImageData(toStandardImageData(resultImageData), 0, 0);
             timer.step('render_to_offscreen');
           }
+        } else if (self.cv) {
+          // 使用OpenCV/WASM处理
+          timer.step('wasm_processing_start');
+          resultImageData = await processWithWasm(
+            payload.imageData,
+            payload.action,
+            payload.params
+          );
+          timer.step('wasm_processing_end');
+
+          // 渲染到canvas
+          ctx.canvas.width = resultImageData.width;
+          ctx.canvas.height = resultImageData.height;
+
+          if (!payload.skipRendering) {
+            ctx.putImageData(toStandardImageData(resultImageData), 0, 0);
+            timer.step('render_to_offscreen');
+          }
         } else {
-          // 暂时只支持JS滤镜，其他操作返回原图
-          console.warn(`操作 ${payload.action} 暂不支持，返回原图`);
+          // OpenCV未准备好，返回原图
+          console.warn(
+            `OpenCV未准备好，操作 ${payload.action} 暂不支持，返回原图`
+          );
           resultImageData = payload.imageData;
         }
 

@@ -364,7 +364,7 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
               type="text"
               icon={<Trash2 size={20} />}
               onClick={handleRevertToOriginal}
-              disabled={!currentImage || loading}
+              disabled={!currentImage || loading || !canUndo}
             />
           </Tooltip>
         </div>
