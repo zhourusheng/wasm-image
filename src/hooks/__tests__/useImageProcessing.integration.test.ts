@@ -13,7 +13,7 @@ vi.mock('../../store/uiStore');
 
 // Mock notification service
 vi.mock('../../utils/notificationService', () => ({
-  notificationService: {
+  default: {
     warning: vi.fn(),
     error: vi.fn(),
     success: vi.fn(),
@@ -21,9 +21,13 @@ vi.mock('../../utils/notificationService', () => ({
 }));
 
 describe('useImageProcessing 集成测试', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockImageStore: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockEditorStore: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockUiStore: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockWorker: any;
 
   beforeEach(() => {
@@ -31,11 +35,25 @@ describe('useImageProcessing 集成测试', () => {
     vi.clearAllMocks();
 
     // 创建mock worker
+    const messageHandlers: Map<string, (event: MessageEvent) => void> =
+      new Map();
     mockWorker = {
       postMessage: vi.fn(),
       terminate: vi.fn(),
-      addEventListener: vi.fn(),
+      addEventListener: vi.fn(
+        (event: string, handler: (event: MessageEvent) => void) => {
+          messageHandlers.set(event, handler);
+        }
+      ),
       removeEventListener: vi.fn(),
+      // 添加一个方法来触发消息事件
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      _triggerMessage: (data: any) => {
+        const handler = messageHandlers.get('message');
+        if (handler) {
+          handler({ data } as MessageEvent);
+        }
+      },
     };
 
     // Mock store返回值
@@ -149,21 +167,22 @@ describe('useImageProcessing 集成测试', () => {
     it('应该正确处理成功的Worker响应', async () => {
       const { result } = renderHook(() => useImageProcessing());
 
-      // 模拟Worker成功响应
+      // 模拟Worker成功响应 - 使用正确的payload格式
       const processedImageData = createMockImageData(
         100,
         100,
         [0, 255, 0, 255]
       );
       const successMessage = {
-        data: {
-          type: 'image-processed',
-          payload: {
-            success: true,
-            imageData: processedImageData,
+        type: 'image-processed',
+        payload: {
+          imageData: processedImageData,
+          perfLog: {
             operation: 'blur',
-            params: { intensity: 5 },
+            totalTime: 100,
+            steps: [{ name: 'blur', elapsed: 100 }],
           },
+          isHistoryNavigation: false,
         },
       };
 
@@ -173,19 +192,14 @@ describe('useImageProcessing 集成测试', () => {
 
       // 模拟Worker响应
       act(() => {
-        const messageHandler = mockWorker.addEventListener.mock.calls.find(
-          (call: any) => call[0] === 'message'
-        )?.[1];
-        if (messageHandler) {
-          messageHandler(successMessage);
-        }
+        result.current.handleWorkerMessage({
+          data: successMessage,
+        } as MessageEvent);
       });
 
-      // 验证图像被更新
+      // 验证图像被更新（非original操作且非预览模式）
       expect(mockImageStore.updateImage).toHaveBeenCalledWith(
-        processedImageData,
-        'blur',
-        { intensity: 5 }
+        processedImageData
       );
 
       // 验证加载状态被重置
@@ -197,13 +211,8 @@ describe('useImageProcessing 集成测试', () => {
 
       // 模拟Worker错误响应
       const errorMessage = {
-        data: {
-          type: 'image-processed',
-          payload: {
-            success: false,
-            error: '处理失败：参数无效',
-          },
-        },
+        type: 'error',
+        payload: '处理失败：参数无效',
       };
 
       act(() => {
@@ -212,18 +221,15 @@ describe('useImageProcessing 集成测试', () => {
 
       // 模拟Worker错误响应
       act(() => {
-        const messageHandler = mockWorker.addEventListener.mock.calls.find(
-          (call: any) => call[0] === 'message'
-        )?.[1];
-        if (messageHandler) {
-          messageHandler(errorMessage);
-        }
+        result.current.handleWorkerMessage({
+          data: errorMessage,
+        } as MessageEvent);
       });
 
       // 验证图像不会被更新
       expect(mockImageStore.updateImage).not.toHaveBeenCalled();
 
-      // 验证加载状态被重置
+      // 验证加载状态被重置（handleWorkerError会调用setLoading(false)）
       expect(mockUiStore.setLoading).toHaveBeenCalledWith(false);
     });
   });
@@ -275,14 +281,15 @@ describe('useImageProcessing 集成测试', () => {
         [0, 255, 0, 255]
       );
       const successMessage = {
-        data: {
-          type: 'image-processed',
-          payload: {
-            success: true,
-            imageData: processedImageData,
+        type: 'image-processed',
+        payload: {
+          imageData: processedImageData,
+          perfLog: {
             operation: 'crop',
-            params: { x: 10, y: 10, width: 80, height: 80 },
+            totalTime: 150,
+            steps: [{ name: 'crop', elapsed: 150 }],
           },
+          isHistoryNavigation: false,
         },
       };
 
@@ -297,18 +304,17 @@ describe('useImageProcessing 集成测试', () => {
 
       // 模拟Worker成功响应
       act(() => {
-        const messageHandler = mockWorker.addEventListener.mock.calls.find(
-          (call: any) => call[0] === 'message'
-        )?.[1];
-        if (messageHandler) {
-          messageHandler(successMessage);
-        }
+        result.current.handleWorkerMessage({
+          data: successMessage,
+        } as MessageEvent);
       });
 
       // 验证所有相关状态都被正确更新
-      expect(mockImageStore.updateImage).toHaveBeenCalled();
+      expect(mockImageStore.updateImage).toHaveBeenCalledWith(
+        processedImageData
+      );
       expect(mockUiStore.setLoading).toHaveBeenCalledWith(false);
-      expect(mockEditorStore.clearLastProcessedImageId).toHaveBeenCalled();
+      expect(mockUiStore.setCanvasRendered).toHaveBeenCalledWith(true);
     });
   });
 });

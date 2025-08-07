@@ -390,6 +390,7 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
       {/* 画布区域 */}
       <div
         ref={containerRef}
+        data-testid="canvas-container"
         className="flex-1 grid place-items-center p-4 bg-gray-200 dark:bg-gray-800/30 overflow-auto relative"
       >
         {loading && <LoadingOverlay />}
@@ -397,6 +398,8 @@ const Canvas: React.FC<CanvasProps> = ({ containerRef }) => {
         <canvas
           id="canvas"
           ref={canvasRef}
+          role="img"
+          aria-label="图像画布"
           className={`shadow-lg rounded-md ${!currentImage ? 'invisible' : ''}`}
           style={{
             width: currentImage ? `${currentImage.width * zoom}px` : 'auto',

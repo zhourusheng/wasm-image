@@ -16,11 +16,13 @@ describe('HistoryManager 单元测试', () => {
 
   describe('添加历史记录', () => {
     it('应该能够添加新的历史记录', () => {
-      historyManager.add(mockImageData1, 'blur', { intensity: 5 });
+      // 需要至少添加两个状态才能撤销
+      historyManager.add(mockImageData1, 'original');
+      historyManager.add(mockImageData2, 'blur', { intensity: 5 });
 
       expect(historyManager.canUndo()).toBe(true);
       expect(historyManager.canRedo()).toBe(false);
-      expect(historyManager.getHistory()).toHaveLength(1);
+      expect(historyManager.getHistory()).toHaveLength(2);
     });
 
     it('应该为历史记录生成唯一ID和时间戳', () => {

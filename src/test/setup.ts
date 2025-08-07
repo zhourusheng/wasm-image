@@ -33,10 +33,35 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     scale: vi.fn(),
     rotate: vi.fn(),
     measureText: vi.fn(() => ({ width: 0 })),
+    strokeRect: vi.fn(),
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
   }),
 });
 
+// Mock transferControlToOffscreen for OffscreenCanvas support
+Object.defineProperty(
+  HTMLCanvasElement.prototype,
+  'transferControlToOffscreen',
+  {
+    value: vi.fn(() => {
+      // 返回一个模拟的OffscreenCanvas对象
+      return {
+        getContext: vi.fn(() => ({
+          canvas: { width: 100, height: 100 },
+          clearRect: vi.fn(),
+          drawImage: vi.fn(),
+        })),
+        width: 100,
+        height: 100,
+      };
+    }),
+  }
+);
+
 // Mock Worker
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (global as any).Worker = class MockWorker {
   constructor(
     public stringUrl: string | URL,
@@ -54,6 +79,7 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
 };
 
 // Mock ImageData
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (global as any).ImageData = class MockImageData {
   data: Uint8ClampedArray;
   width: number;
@@ -67,11 +93,15 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
   ) {
     if (typeof data === 'number') {
       this.width = data;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       this.height = width!;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       this.data = new Uint8ClampedArray(data * width! * 4);
     } else {
       this.data = data;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       this.width = width!;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       this.height = height!;
     }
   }
