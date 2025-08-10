@@ -197,7 +197,10 @@ export const useImageProcessing = () => {
   // 处理Worker错误
   const handleWorkerError = useCallback(
     (error: string) => {
-      console.error('来自 worker 的错误:', error);
+      // 在开发环境下输出详细错误信息，生产环境只显示用户友好的错误
+      if (import.meta.env.DEV) {
+        console.error('来自 worker 的错误:', error);
+      }
       notificationService.error('图像处理期间发生错误： ' + error);
       setLoading(false);
     },

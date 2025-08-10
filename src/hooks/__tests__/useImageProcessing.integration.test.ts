@@ -207,6 +207,10 @@ describe('useImageProcessing 集成测试', () => {
     });
 
     it('应该正确处理Worker错误响应', async () => {
+      // Mock console.error 来避免 stderr 输出
+      const originalConsoleError = console.error;
+      console.error = vi.fn();
+
       const { result } = renderHook(() => useImageProcessing());
 
       // 模拟Worker错误响应
@@ -231,6 +235,15 @@ describe('useImageProcessing 集成测试', () => {
 
       // 验证加载状态被重置（handleWorkerError会调用setLoading(false)）
       expect(mockUiStore.setLoading).toHaveBeenCalledWith(false);
+
+      // 验证 console.error 被调用
+      expect(console.error).toHaveBeenCalledWith(
+        '来自 worker 的错误:',
+        '处理失败：参数无效'
+      );
+
+      // 恢复 console.error
+      console.error = originalConsoleError;
     });
   });
 
